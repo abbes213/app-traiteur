@@ -1,0 +1,190 @@
+🍽️ Guide d'utilisation — Application Gestion Traiteur
+Accès à l'application
+
+Ouvre ton navigateur et tape l'adresse fournie par ton prestataire.
+L'application s'ouvre directement, aucun mot de passe nécessaire.
+
+🏠 Page d'accueil — Tableau de bord
+
+C'est la première page que tu vois quand tu ouvres l'application.
+
+Elle affiche :
+
+Le nombre de produits en stock
+Le nombre de recettes enregistrées
+Le nombre de mariages validés
+Ton chiffre d'affaires total
+Ton bénéfice total
+Les 5 derniers devis
+Les alertes stock si des produits sont presque épuisés
+📦 Page Stock — Gérer tes produits
+Voir le stock
+
+Quand tu ouvres la page Stock tu vois un tableau avec tous tes produits :
+
+🟢 Vert   → stock suffisant
+🟠 Orange → stock presque épuisé
+🔴 Rouge  → stock épuisé, à racheter immédiatement
+Ajouter un nouveau produit
+Clique sur l'onglet "➕ Ajouter un produit"
+Remplis les informations :
+Nom : ex. Poulet
+Unité : kg, litre, pièce...
+Prix d'achat : ex. 5.50 €
+Quantité : combien tu as en ce moment
+Seuil d'alerte : en dessous de combien tu veux être alerté
+Clique sur "✅ Ajouter le produit"
+Recevoir une livraison
+
+Quand tu achètes de nouveaux ingrédients :
+
+Clique sur l'onglet "📦 Réception stock"
+Choisis le produit reçu
+Tape la quantité reçue
+Tape le nouveau prix d'achat (s'il a changé)
+Clique sur "✅ Confirmer la réception"
+→ Le stock se met à jour automatiquement ✅
+Modifier ou supprimer un produit
+Clique sur l'onglet "✏️ Modifier / Supprimer"
+Choisis le produit dans la liste
+Modifie les informations
+Clique sur "💾 Sauvegarder" ou "🗑️ Supprimer"
+📋 Page Recettes — Gérer tes recettes
+Voir les recettes
+
+Toutes tes recettes sont affichées avec :
+
+Le nombre d'ingrédients
+Le coût par personne calculé automatiquement
+
+Clique sur une recette pour voir tous ses détails.
+
+Créer une nouvelle recette
+Va en bas de la page
+Remplis :
+Nom : ex. Menu Mariage Oriental
+Description : ex. Menu complet avec entrée et dessert
+Frais fixes : ex. 500 € pour la location, décoration...
+Clique sur "✅ Créer la recette"
+Ajouter des ingrédients à une recette
+Clique sur la recette pour l'ouvrir
+En bas de la recette tu vois "➕ Ajouter un ingrédient"
+Choisis le produit depuis le stock
+Tape la quantité par personne (ex: 0.3 kg par personne)
+Clique sur "➕ Ajouter"
+→ Le coût par personne se recalcule automatiquement ✅
+Supprimer un ingrédient
+Ouvre la recette
+Choisis l'ingrédient à supprimer
+Clique sur "🗑️ Supprimer"
+🧮 Page Devis — Générer un devis
+
+C'est la page la plus importante. Elle te permet de calculer le prix d'un mariage en quelques secondes.
+
+Étape 1 — Informations de base
+Nom du client : ex. M. Ahmed
+Date du mariage : sélectionne la date
+Recette : choisis le menu dans la liste
+Nombre de personnes : tape le nombre d'invités
+Étape 2 — Employés
+
+Tu vois 2 lignes par défaut (Serveurs et Cuisiniers).
+
+Tape le type d'employé : ex. Serveurs
+Tape le nombre d'employés : ex. 5
+Tape le nombre d'heures : ex. 8
+→ Le coût est calculé automatiquement (nb × heures × 12€) ✅
+
+Tu peux ajouter d'autres types d'employés avec "➕ Ajouter une ligne"
+
+Étape 3 — Frais supplémentaires
+Tu vois déjà les frais fixes de la recette
+Ajoute des frais supplémentaires si besoin (transport, déco...)
+Calculer le devis
+
+Clique sur "🧮 CALCULER LE DEVIS"
+
+Tu vois immédiatement :
+
+🛒 Coût ingrédients  →  calculé automatiquement depuis le stock
+👨‍🍳 Coût employés     →  nb × heures × 12€
+📌 Frais fixes        →  recette + supplémentaires
+💰 Coût total         →  tout additionné
+💵 Prix final client  →  coût total ÷ 30%
+🤑 Ton bénéfice       →  70% du prix final
+Les 3 boutons d'action
+
+💾 Sauvegarder simulation
+→ Sauvegarde le devis SANS toucher au stock
+→ Utile quand le client n'a pas encore accepté
+
+🖨️ Télécharger PDF
+→ Génère un PDF professionnel à imprimer ou envoyer au client
+→ Le devis est aussi sauvegardé automatiquement
+
+✅ VALIDER LE MARIAGE
+→ À utiliser uniquement quand le client a accepté
+→ Met à jour le stock automatiquement
+→ Déclenche les alertes si des produits manquent
+→ Sauvegarde dans l'historique
+
+📁 Page Historique — Voir tous les devis
+
+Tu vois tous tes devis avec :
+
+✅ Validé : mariage confirmé, stock mis à jour
+💾 Simulation : devis en attente de confirmation
+Filtrer les devis
+Par statut : Tous / Simulation / Validé
+Par nom du client : tape le nom dans la barre de recherche
+Chiffres clés en haut
+Total des devis créés
+Nombre de mariages validés
+Chiffre d'affaires total
+Bénéfice total
+⚙️ Page Paramètres — Configuration
+Paramètres financiers
+Taux horaire : actuellement 12€/heure (modifiable si ça change)
+Taux bénéfice : actuellement 70% (modifiable)
+Informations du traiteur
+Ton nom et adresse qui apparaissent sur les PDF des devis
+Ton numéro de téléphone
+
+N'oublie pas de cliquer sur "💾 Sauvegarder les paramètres" après chaque modification.
+
+⚠️ Les alertes stock — Comment ça marche
+
+L'application surveille automatiquement ton stock.
+
+Quand une alerte apparaît :
+
+→ Un bandeau rouge apparaît en haut de toutes les pages
+→ Il liste tous les produits à racheter
+→ Il indique la quantité actuelle vs la quantité minimum
+
+Quand l'alerte disparaît :
+
+→ Quand tu fais une réception de stock
+→ Et que la quantité repasse au dessus du seuil
+🔄 Exemple complet — Un mariage de A à Z
+1. Tu reçois une commande de M. Ahmed pour 150 personnes
+
+2. Tu vas sur Page Devis
+   → Tu choisis "Menu Mariage Oriental"
+   → Tu tapes 150 personnes
+   → Tu ajoutes 6 serveurs × 8h + 4 cuisiniers × 10h
+   → Tu cliques CALCULER
+   → Tu vois le prix final et ton bénéfice
+
+3. Tu cliques "🖨️ Télécharger PDF"
+   → Tu envoies le devis au client
+
+4. Le client accepte
+   → Tu retournes sur le devis
+   → Tu cliques "✅ VALIDER LE MARIAGE"
+   → Le stock se met à jour automatiquement
+   → Si des produits manquent → alerte immédiate
+
+5. Tu vas sur Page Stock
+   → Tu vois les produits à racheter en rouge
+   → Tu fais une réception de stock quand tu achètes

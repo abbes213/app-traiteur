@@ -40,6 +40,10 @@ def modifier_produit(id, nom, unite, prix_achat, quantite, seuil):
     }).eq("id", id).execute()
 
 def supprimer_produit(id):
+    # 1. On supprime d'abord les liaisons de ce produit dans les recettes
+    supabase.table("recette_ingredients").delete().eq("produit_id", id).execute()
+    
+    # 2. On peut ensuite supprimer le produit du stock en toute sécurité
     supabase.table("produits").delete().eq("id", id).execute()
 
 def reception_stock(produit_id, quantite_achetee, nouveau_prix):

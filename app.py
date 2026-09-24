@@ -32,20 +32,33 @@ def check_password():
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
 
+        # Image en fond avec titre par dessus
         st.markdown("""
-            <div style='text-align: center; padding: 30px;
-                        background: linear-gradient(135deg, #2C3E50, #3498DB);
-                        border-radius: 15px; margin-bottom: 20px;'>
-                <h1 style='color: white; font-size: 48px; margin: 0;'>🍽️</h1>
-                <h2 style='color: white; margin: 10px 0 5px 0;'>Application Traiteur</h2>
-                <p style='color: #BDC3C7; margin: 0;'>Gestion professionnelle de vos mariages</p>
+            <div style='
+                background-image: url("https://images.unsplash.com/photo-1555244162-803834f70033?w=1200");
+                background-size: cover;
+                background-position: center;
+                padding: 60px 30px;
+                border-radius: 15px;
+                margin-bottom: 20px;
+            '>
+                <div style='
+                    background: rgba(44, 62, 80, 0.82);
+                    padding: 30px;
+                    border-radius: 10px;
+                    text-align: center;
+                '>
+                    <h1 style='color: white; font-size: 52px; margin: 0;'>🍽️</h1>
+                    <h2 style='color: white; margin: 10px 0 5px 0; font-size: 26px;'>
+                        Application Traiteur
+                    </h2>
+                    <p style='color: #BDC3C7; margin: 0; font-size: 14px;'>
+                        Gestion professionnelle de vos mariages
+                    </p>
+                </div>
             </div>
         """, unsafe_allow_html=True)
-        st.image(
-            "https://images.unsplash.com/photo-1555244162-803834f70033?w=1200",
-            width=525
-        )
-        st.markdown("<br>", unsafe_allow_html=True)
+
         st.markdown("<br>", unsafe_allow_html=True)
 
         mot_de_passe = st.text_input(

@@ -19,7 +19,7 @@ supabase = get_client()
 # MOT DE PASSE
 # ─────────────────────────────────────────────
 
-MOT_DE_PASSE = "traiteur2024"
+MOT_DE_PASSE = "traiteur_mamieflore2026"
 
 def check_password():
     if "authentifie" not in st.session_state:

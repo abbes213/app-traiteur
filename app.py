@@ -3,38 +3,50 @@ import os
 sys.path.append(os.path.abspath(__file__))
 
 import streamlit as st
-from database import get_connection, créer_tables
+from database import get_client, créer_tables
 
 créer_tables()
-st.image("https://images.unsplash.com/photo-1555244162-803834f70033?w=1200", use_container_width=True)
+
 st.set_page_config(
     page_title="Gestion Traiteur",
     page_icon="🍽️",
     layout="wide"
 )
 
+supabase = get_client()
+
 # ─────────────────────────────────────────────
 # MOT DE PASSE
 # ─────────────────────────────────────────────
 
-MOT_DE_PASSE = "traiteur2024"  # ← change ça par le mot de passe que tu veux
+MOT_DE_PASSE = "traiteur2024"
 
 def check_password():
-    """Vérifie le mot de passe"""
-
     if "authentifie" not in st.session_state:
         st.session_state.authentifie = False
 
     if st.session_state.authentifie:
         return True
 
-    # Page de connexion
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        st.title("🍽️ Application Traiteur")
-        st.markdown("---")
-        st.subheader("🔒 Connexion")
+
+        st.markdown("""
+            <div style='text-align: center; padding: 30px;
+                        background: linear-gradient(135deg, #2C3E50, #3498DB);
+                        border-radius: 15px; margin-bottom: 20px;'>
+                <h1 style='color: white; font-size: 48px; margin: 0;'>🍽️</h1>
+                <h2 style='color: white; margin: 10px 0 5px 0;'>Application Traiteur</h2>
+                <p style='color: #BDC3C7; margin: 0;'>Gestion professionnelle de vos mariages</p>
+            </div>
+        """, unsafe_allow_html=True)
+        st.image(
+            "https://images.unsplash.com/photo-1555244162-803834f70033?w=1200",
+            width=525
+        )
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
         mot_de_passe = st.text_input(
             "Mot de passe",
@@ -51,92 +63,80 @@ def check_password():
                 st.error("❌ Mot de passe incorrect !")
 
         st.markdown("<br>", unsafe_allow_html=True)
-        st.caption("Contactez votre administrateur si vous avez oublié le mot de passe.")
+        st.caption("🔑 Contactez votre administrateur si vous avez oublié le mot de passe.")
+
+        st.markdown("""
+            <div style='text-align: center; margin-top: 30px;'>
+                <p style='color: #BDC3C7; font-size: 12px;'>
+                    © 2024 Application Traiteur — Tous droits réservés
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
 
     return False
 
 
-# ─────────────────────────────────────────────
-# VÉRIFICATION AVANT TOUT
-# ─────────────────────────────────────────────
-
 if not check_password():
-    st.stop()  # ← bloque tout si pas connecté
+    st.stop()
 
 # ─────────────────────────────────────────────
 # FONCTIONS
 # ─────────────────────────────────────────────
 
 def get_stats():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT
-            COUNT(*) as total_devis,
-            SUM(CASE WHEN statut = 'validé' THEN 1 ELSE 0 END) as mariages,
-            SUM(CASE WHEN statut = 'validé' THEN prix_final ELSE 0 END) as ca,
-            SUM(CASE WHEN statut = 'validé' THEN benefice ELSE 0 END) as benefice
-        FROM devis
-    """)
-    stats = cursor.fetchone()
-    conn.close()
-    return stats
+    res   = supabase.table("devis").select("*").execute()
+    devis = res.data
+
+    total_devis    = len(devis)
+    total_valides  = len([d for d in devis if d['statut'] == 'validé'])
+    ca_total       = sum(d['prix_final'] for d in devis if d['statut'] == 'validé')
+    benefice_total = sum(d['benefice']   for d in devis if d['statut'] == 'validé')
+
+    return {
+        "total_devis"   : total_devis,
+        "total_valides" : total_valides,
+        "ca_total"      : ca_total,
+        "benefice_total": benefice_total
+    }
 
 
 def get_alertes():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT * FROM produits
-        WHERE quantite_stock <= seuil_alerte
-        ORDER BY quantite_stock ASC
-    """)
-    alertes = cursor.fetchall()
-    conn.close()
-    return alertes
+    produits = supabase.table("produits").select("*").execute()
+    return [p for p in produits.data if p['quantite_stock'] <= p['seuil_alerte']]
 
 
 def get_derniers_devis():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT d.*, r.nom as recette_nom
-        FROM devis d
-        JOIN recettes r ON d.recette_id = r.id
-        ORDER BY d.date_creation DESC
-        LIMIT 5
-    """)
-    devis = cursor.fetchall()
-    conn.close()
-    return devis
+    res = supabase.table("devis")\
+        .select("*, recettes(nom)")\
+        .order("date_creation", desc=True)\
+        .limit(5).execute()
+    return res.data
 
 
 def get_nb_produits():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) as nb FROM produits")
-    nb = cursor.fetchone()['nb']
-    conn.close()
-    return nb
+    res = supabase.table("produits").select("id").execute()
+    return len(res.data)
 
 
 def get_nb_recettes():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) as nb FROM recettes")
-    nb = cursor.fetchone()['nb']
-    conn.close()
-    return nb
+    res = supabase.table("recettes").select("id").execute()
+    return len(res.data)
 
 
 # ─────────────────────────────────────────────
 # TABLEAU DE BORD
 # ─────────────────────────────────────────────
 
-# Bouton déconnexion en haut à droite
 col_titre, col_logout = st.columns([5, 1])
 with col_titre:
-    st.title("🍽️ Gestion Traiteur — Tableau de Bord")
+    st.markdown("""
+        <div style='background: linear-gradient(135deg, #2C3E50, #3498DB);
+                    padding: 15px 25px; border-radius: 10px; margin-bottom: 10px;'>
+            <h1 style='color: white; margin: 0; font-size: 28px;'>
+                🍽️ Gestion Traiteur — Tableau de Bord
+            </h1>
+        </div>
+    """, unsafe_allow_html=True)
 with col_logout:
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🔓 Déconnexion"):
@@ -163,12 +163,12 @@ nb_produits = get_nb_produits()
 nb_recettes = get_nb_recettes()
 
 col1, col2, col3, col4, col5, col6 = st.columns(6)
-col1.metric("📦 Produits",          nb_produits)
-col2.metric("📋 Recettes",          nb_recettes)
-col3.metric("📄 Total devis",       stats['total_devis'] or 0)
-col4.metric("✅ Mariages validés",  stats['mariages'] or 0)
-col5.metric("💵 Chiffre d'affaires", f"{stats['ca'] or 0:.2f} €")
-col6.metric("🤑 Bénéfice total",    f"{stats['benefice'] or 0:.2f} €")
+col1.metric("📦 Produits",           nb_produits)
+col2.metric("📋 Recettes",           nb_recettes)
+col3.metric("📄 Total devis",        stats['total_devis'])
+col4.metric("✅ Mariages validés",   stats['total_valides'])
+col5.metric("💵 Chiffre d'affaires", f"{stats['ca_total']:.2f} €")
+col6.metric("🤑 Bénéfice total",     f"{stats['benefice_total']:.2f} €")
 
 st.divider()
 
@@ -182,9 +182,10 @@ if not derniers_devis:
 else:
     for d in derniers_devis:
         statut_icon = "✅" if d['statut'] == 'validé' else "💾"
+        recette_nom = d['recettes']['nom'] if d['recettes'] else "Inconnue"
         col1, col2, col3, col4, col5 = st.columns([2, 2, 1, 2, 1])
         col1.write(f"**{d['nom_client']}**")
-        col2.write(d['recette_nom'])
+        col2.write(recette_nom)
         col3.write(f"{d['nb_personnes']} pers.")
         col4.write(f"{d['prix_final']:.2f} €")
         col5.write(f"{statut_icon} {d['statut']}")

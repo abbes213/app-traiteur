@@ -4,107 +4,67 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import streamlit as st
 import pandas as pd
-from database import get_connection, créer_tables
+from database import get_client, créer_tables
 
-# Initialisation base de données
 créer_tables()
 
 st.set_page_config(page_title="Gestion du Stock", page_icon="📦")
-# Vérification de la sécurité (À PLACER EXACTEMENT ICI)
-if not st.session_state.get("authentifie", False):
-    st.switch_page("app.py")
 st.title("📦 Gestion du Stock")
+
+supabase = get_client()
 
 # ─────────────────────────────────────────────
 # FONCTIONS
 # ─────────────────────────────────────────────
 
 def get_tous_produits():
-    """Récupère tous les produits du stock"""
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM produits ORDER BY nom")
-    produits = cursor.fetchall()
-    conn.close()
-    return produits
-
+    res = supabase.table("produits").select("*").order("nom").execute()
+    return res.data
 
 def ajouter_produit(nom, unite, prix_achat, quantite, seuil):
-    """Ajoute un nouveau produit dans le stock"""
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO produits (nom, unite, prix_achat, quantite_stock, seuil_alerte)
-        VALUES (?, ?, ?, ?, ?)
-    """, (nom, unite, prix_achat, quantite, seuil))
-    conn.commit()
-    conn.close()
-
+    supabase.table("produits").insert({
+        "nom": nom,
+        "unite": unite,
+        "prix_achat": prix_achat,
+        "quantite_stock": quantite,
+        "seuil_alerte": seuil
+    }).execute()
 
 def modifier_produit(id, nom, unite, prix_achat, quantite, seuil):
-    """Modifie un produit existant"""
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE produits
-        SET nom = ?, unite = ?, prix_achat = ?,
-            quantite_stock = ?, seuil_alerte = ?,
-            date_maj = date('now')
-        WHERE id = ?
-    """, (nom, unite, prix_achat, quantite, seuil, id))
-    conn.commit()
-    conn.close()
-
+    supabase.table("produits").update({
+        "nom": nom,
+        "unite": unite,
+        "prix_achat": prix_achat,
+        "quantite_stock": quantite,
+        "seuil_alerte": seuil
+    }).eq("id", id).execute()
 
 def supprimer_produit(id):
-    """Supprime un produit"""
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM produits WHERE id = ?", (id,))
-    conn.commit()
-    conn.close()
-
+    supabase.table("produits").delete().eq("id", id).execute()
 
 def reception_stock(produit_id, quantite_achetee, nouveau_prix):
-    """Réception d'un achat — augmente le stock"""
-    conn = get_connection()
-    cursor = conn.cursor()
+    produit = supabase.table("produits").select("quantite_stock").eq("id", produit_id).execute()
+    ancienne_qte = produit.data[0]['quantite_stock']
+    nouvelle_qte = ancienne_qte + quantite_achetee
 
-    # Mise à jour quantité et prix dans produits
-    cursor.execute("""
-        UPDATE produits
-        SET quantite_stock = quantite_stock + ?,
-            prix_achat = ?,
-            date_maj = date('now')
-        WHERE id = ?
-    """, (quantite_achetee, nouveau_prix, produit_id))
+    supabase.table("produits").update({
+        "quantite_stock": nouvelle_qte,
+        "prix_achat": nouveau_prix
+    }).eq("id", produit_id).execute()
 
-    # Sauvegarde dans historique achats
-    cursor.execute("""
-        INSERT INTO achats_stock (produit_id, quantite_achetee, prix_achat)
-        VALUES (?, ?, ?)
-    """, (produit_id, quantite_achetee, nouveau_prix))
-
-    conn.commit()
-    conn.close()
-
+    supabase.table("achats_stock").insert({
+        "produit_id": produit_id,
+        "quantite_achetee": quantite_achetee,
+        "prix_achat": nouveau_prix
+    }).execute()
 
 def get_alertes():
-    """Retourne les produits sous le seuil d'alerte"""
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT * FROM produits
-        WHERE quantite_stock <= seuil_alerte
-        ORDER BY quantite_stock ASC
-    """)
-    alertes = cursor.fetchall()
-    conn.close()
-    return alertes
+    produits = supabase.table("produits").select("*").execute()
+    return [p for p in produits.data if p['quantite_stock'] <= p['seuil_alerte']]
 
 
 # ─────────────────────────────────────────────
-# AFFICHAGE DES ALERTES EN HAUT DE PAGE
+# ALERTES
 # ─────────────────────────────────────────────
 
 alertes = get_alertes()
@@ -129,10 +89,8 @@ produits = get_tous_produits()
 if not produits:
     st.info("Aucun produit dans le stock. Ajoutez votre premier produit !")
 else:
-    # Construction du tableau
     data = []
     for p in produits:
-        # Définir le statut selon le stock
         if p['quantite_stock'] == 0:
             statut = "🔴 Rupture"
         elif p['quantite_stock'] <= p['seuil_alerte']:
@@ -141,19 +99,18 @@ else:
             statut = "🟢 OK"
 
         data.append({
-            "Produit"       : p['nom'],
-            "Unité"         : p['unite'],
-            "Prix Achat"    : f"{p['prix_achat']} €",
-            "Quantité"      : p['quantite_stock'],
-            "Seuil Alerte"  : p['seuil_alerte'],
-            "Statut"        : statut,
-            "Dernière MAJ"  : p['date_maj']
+            "Produit"      : p['nom'],
+            "Unité"        : p['unite'],
+            "Prix Achat"   : f"{p['prix_achat']} €",
+            "Quantité"     : p['quantite_stock'],
+            "Seuil Alerte" : p['seuil_alerte'],
+            "Statut"       : statut,
+            "Dernière MAJ" : p['date_maj']
         })
 
     df = pd.DataFrame(data)
     st.dataframe(df, use_container_width=True, hide_index=True)
 
-    # Bouton export Excel
     excel_data = df.to_csv(index=False).encode('utf-8')
     st.download_button(
         label="📥 Exporter en Excel",
@@ -165,7 +122,7 @@ else:
 st.divider()
 
 # ─────────────────────────────────────────────
-# LES 3 ONGLETS D'ACTIONS
+# ONGLETS
 # ─────────────────────────────────────────────
 
 tab1, tab2, tab3 = st.tabs([
@@ -174,9 +131,7 @@ tab1, tab2, tab3 = st.tabs([
     "✏️ Modifier / Supprimer"
 ])
 
-# ──────────────────────────────
-# ONGLET 1 — Ajouter un produit
-# ──────────────────────────────
+# ── ONGLET 1 ──
 with tab1:
     st.subheader("➕ Ajouter un nouveau produit")
 
@@ -184,13 +139,13 @@ with tab1:
         col1, col2 = st.columns(2)
 
         with col1:
-            nom         = st.text_input("Nom du produit", placeholder="ex: Poulet")
-            unite       = st.selectbox("Unité", ["kg", "litre", "pièce", "gramme", "cl", "autre"])
-            prix_achat  = st.number_input("Prix d'achat (€)", min_value=0.0, step=0.01)
+            nom        = st.text_input("Nom du produit", placeholder="ex: Poulet")
+            unite      = st.selectbox("Unité", ["kg", "litre", "pièce", "gramme", "cl", "autre"])
+            prix_achat = st.number_input("Prix d'achat (€)", min_value=0.0, step=0.01)
 
         with col2:
-            quantite    = st.number_input("Quantité initiale", min_value=0.0, step=0.1)
-            seuil       = st.number_input("Seuil d'alerte minimum", min_value=0.0, step=0.1)
+            quantite = st.number_input("Quantité initiale", min_value=0.0, step=0.1)
+            seuil    = st.number_input("Seuil d'alerte minimum", min_value=0.0, step=0.1)
 
         submitted = st.form_submit_button("✅ Ajouter le produit", use_container_width=True)
 
@@ -204,9 +159,7 @@ with tab1:
                 st.success(f"✅ Produit **{nom}** ajouté avec succès !")
                 st.rerun()
 
-# ──────────────────────────────────
-# ONGLET 2 — Réception de stock
-# ──────────────────────────────────
+# ── ONGLET 2 ──
 with tab2:
     st.subheader("📦 Réception de nouveaux achats")
 
@@ -215,9 +168,7 @@ with tab2:
     if not produits:
         st.info("Ajoutez d'abord des produits dans le stock.")
     else:
-        options  = {p['nom']: p for p in produits}
-
-        # ← selectbox EN DEHORS du form pour mise à jour en temps réel
+        options       = {p['nom']: p for p in produits}
         produit_choisi = st.selectbox("Produit reçu", list(options.keys()))
 
         produit_selectionne = options[produit_choisi]
@@ -228,15 +179,13 @@ with tab2:
             col1, col2 = st.columns(2)
             with col1:
                 qte_recue = st.number_input(
-                    f"Quantité reçue ({unite_actuelle})",  # ← unité correcte ✅
-                    min_value=0.1,
-                    step=0.1
+                    f"Quantité reçue ({unite_actuelle})",
+                    min_value=0.1, step=0.1
                 )
             with col2:
                 nouveau_prix = st.number_input(
                     "Nouveau prix d'achat (€)",
-                    min_value=0.01,
-                    step=0.01,
+                    min_value=0.0, step=0.01,
                     value=float(prix_actuel)
                 )
 
@@ -253,13 +202,11 @@ with tab2:
                 )
                 st.success(
                     f"✅ **{qte_recue} {unite_actuelle}** de "
-                    f"**{produit_choisi}** ajoutés au stock ! "
-                    f"Nouveau prix : {nouveau_prix} €"
+                    f"**{produit_choisi}** ajoutés au stock !"
                 )
                 st.rerun()
-# ──────────────────────────────────────
-# ONGLET 3 — Modifier / Supprimer
-# ──────────────────────────────────────
+
+# ── ONGLET 3 ──
 with tab3:
     st.subheader("✏️ Modifier ou Supprimer un produit")
 
@@ -268,26 +215,38 @@ with tab3:
     if not produits:
         st.info("Aucun produit à modifier.")
     else:
-        options = {p['nom']: p for p in produits}
+        options        = {p['nom']: p for p in produits}
         produit_choisi = st.selectbox("Choisir un produit", list(options.keys()))
-        p = options[produit_choisi]
+        p              = options[produit_choisi]
 
         with st.form("form_modifier"):
             col1, col2 = st.columns(2)
 
             with col1:
-                nouveau_nom     = st.text_input("Nom", value=p['nom'])
-                nouvelle_unite  = st.selectbox(
+                nouveau_nom    = st.text_input("Nom", value=p['nom'])
+                nouvelle_unite = st.selectbox(
                     "Unité",
                     ["kg", "litre", "pièce", "gramme", "cl", "autre"],
                     index=["kg", "litre", "pièce", "gramme", "cl", "autre"].index(p['unite'])
                     if p['unite'] in ["kg", "litre", "pièce", "gramme", "cl", "autre"] else 0
                 )
-                nouveau_prix    = st.number_input("Prix d'achat (€)", value=float(p['prix_achat']), step=0.01)
+                nouveau_prix = st.number_input(
+                    "Prix d'achat (€)",
+                    value=float(p['prix_achat']),
+                    step=0.01
+                )
 
             with col2:
-                nouvelle_qte    = st.number_input("Quantité", value=float(p['quantite_stock']), step=0.1)
-                nouveau_seuil   = st.number_input("Seuil alerte", value=float(p['seuil_alerte']), step=0.1)
+                nouvelle_qte   = st.number_input(
+                    "Quantité",
+                    value=float(p['quantite_stock']),
+                    step=0.1
+                )
+                nouveau_seuil  = st.number_input(
+                    "Seuil alerte",
+                    value=float(p['seuil_alerte']),
+                    step=0.1
+                )
 
             col_mod, col_sup = st.columns(2)
 

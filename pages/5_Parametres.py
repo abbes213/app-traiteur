@@ -3,47 +3,52 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import streamlit as st
-from database import get_connection, créer_tables
+from database import get_client, créer_tables
 
 créer_tables()
 
 st.set_page_config(page_title="Paramètres", page_icon="⚙️")
-# Vérification de la sécurité (À PLACER EXACTEMENT ICI)
+
+# Vérification sécurité
 if not st.session_state.get("authentifie", False):
     st.switch_page("app.py")
+
 st.title("⚙️ Paramètres")
+
+supabase = get_client()
 
 # ─────────────────────────────────────────────
 # FONCTIONS
 # ─────────────────────────────────────────────
 
 def get_parametres():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM parametres WHERE id = 1")
-    params = cursor.fetchone()
-    conn.close()
-    return params
+    res = supabase.table("parametres").select("*").eq("id", 1).execute()
+    if not res.data:
+        # Crée les paramètres par défaut si ils n'existent pas
+        supabase.table("parametres").insert({
+            "id"           : 1,
+            "taux_horaire" : 12.0,
+            "taux_benefice": 0.70,
+            "taux_charges" : 0.30,
+            "nom_traiteur" : "Mon Traiteur",
+            "adresse"      : "",
+            "telephone"    : ""
+        }).execute()
+        res = supabase.table("parametres").select("*").eq("id", 1).execute()
+    return res.data[0]
 
 
 def sauvegarder_parametres(taux_horaire, taux_benefice,
                             nom_traiteur, adresse, telephone):
     taux_charges = 1 - taux_benefice
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE parametres
-        SET taux_horaire  = ?,
-            taux_benefice = ?,
-            taux_charges  = ?,
-            nom_traiteur  = ?,
-            adresse       = ?,
-            telephone     = ?
-        WHERE id = 1
-    """, (taux_horaire, taux_benefice, taux_charges,
-          nom_traiteur, adresse, telephone))
-    conn.commit()
-    conn.close()
+    supabase.table("parametres").update({
+        "taux_horaire"  : taux_horaire,
+        "taux_benefice" : taux_benefice,
+        "taux_charges"  : taux_charges,
+        "nom_traiteur"  : nom_traiteur,
+        "adresse"       : adresse,
+        "telephone"     : telephone
+    }).eq("id", 1).execute()
 
 
 # ─────────────────────────────────────────────
@@ -70,8 +75,7 @@ with st.form("form_params"):
             min_value=50,
             max_value=90,
             value=int(params['taux_benefice'] * 100),
-            step=5,
-            help="Le reste sera les charges"
+            step=5
         )
 
     with col2:
@@ -121,7 +125,7 @@ with st.form("form_params"):
 st.divider()
 
 # ─────────────────────────────────────────────
-# EXEMPLE DE CALCUL EN TEMPS RÉEL
+# SIMULATEUR
 # ─────────────────────────────────────────────
 
 st.subheader("🧮 Simulateur rapide")
@@ -134,11 +138,11 @@ cout_exemple = st.number_input(
     step=100.0
 )
 
-taux_ch = (100 - taux_benefice) / 100
+taux_ch  = (100 - taux_benefice) / 100
 prix_ex  = cout_exemple / taux_ch
 benef_ex = prix_ex * (taux_benefice / 100)
 
 col1, col2, col3 = st.columns(3)
-col1.metric("💰 Coût total",    f"{cout_exemple:.2f} €")
-col2.metric("💵 Prix client",   f"{prix_ex:.2f} €")
+col1.metric("💰 Coût total",     f"{cout_exemple:.2f} €")
+col2.metric("💵 Prix client",    f"{prix_ex:.2f} €")
 col3.metric("🤑 Votre bénéfice", f"{benef_ex:.2f} €")

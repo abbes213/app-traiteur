@@ -4,89 +4,69 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import streamlit as st
 import pandas as pd
-from database import get_connection, créer_tables
+from database import get_client, créer_tables
 from datetime import date
 from modules.pdf_generator import generer_pdf_devis
 
 créer_tables()
 
 st.set_page_config(page_title="Générateur de Devis", page_icon="🧮")
-# Vérification de la sécurité (À PLACER EXACTEMENT ICI)
+
+# Vérification sécurité
 if not st.session_state.get("authentifie", False):
     st.switch_page("app.py")
+
 st.title("🧮 Générateur de Devis")
+
+supabase = get_client()
 
 # ─────────────────────────────────────────────
 # FONCTIONS
 # ─────────────────────────────────────────────
 
 def get_toutes_recettes():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM recettes ORDER BY nom")
-    recettes = cursor.fetchall()
-    conn.close()
-    return recettes
-
+    res = supabase.table("recettes").select("*").order("nom").execute()
+    return res.data
 
 def get_ingredients_recette(recette_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT ri.quantite_par_personne, p.nom,
-               p.unite, p.prix_achat, p.id as produit_id
-        FROM recette_ingredients ri
-        JOIN produits p ON ri.produit_id = p.id
-        WHERE ri.recette_id = ?
-    """, (recette_id,))
-    ingredients = cursor.fetchall()
-    conn.close()
-    return ingredients
-
+    res = supabase.table("recette_ingredients")\
+        .select("*, produits(nom, unite, prix_achat, id)")\
+        .eq("recette_id", recette_id).execute()
+    return res.data
 
 def get_parametres():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM parametres WHERE id = 1")
-    params = cursor.fetchone()
-    conn.close()
-    return params
-
+    res = supabase.table("parametres").select("*").eq("id", 1).execute()
+    return res.data[0]
 
 def get_recette(recette_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM recettes WHERE id = ?", (recette_id,))
-    recette = cursor.fetchone()
-    conn.close()
-    return recette
-
+    res = supabase.table("recettes").select("*").eq("id", recette_id).execute()
+    return res.data[0]
 
 def calculer_devis(recette_id, nb_personnes, employes, frais_fixes_supplementaires):
-    """Calcule le devis complet"""
     params      = get_parametres()
     ingredients = get_ingredients_recette(recette_id)
     recette     = get_recette(recette_id)
 
     # Coût ingrédients
     detail_ingredients = []
-    cout_ingredients = 0
+    cout_ingredients   = 0
     for ing in ingredients:
-        qte_totale  = ing['quantite_par_personne'] * nb_personnes
-        cout        = qte_totale * ing['prix_achat']
+        produit    = ing['produits']
+        qte_totale = ing['quantite_par_personne'] * nb_personnes
+        cout       = qte_totale * produit['prix_achat']
         cout_ingredients += cout
         detail_ingredients.append({
-            "Ingrédient"         : ing['nom'],
-            "Qté / personne"     : f"{ing['quantite_par_personne']} {ing['unite']}",
-            "Qté totale"         : f"{qte_totale:.2f} {ing['unite']}",
-            "Prix achat"         : f"{ing['prix_achat']} €",
-            "Coût total"         : f"{cout:.2f} €"
+            "Ingrédient"     : produit['nom'],
+            "Qté / personne" : f"{ing['quantite_par_personne']} {produit['unite']}",
+            "Qté totale"     : f"{qte_totale:.2f} {produit['unite']}",
+            "Prix achat"     : f"{produit['prix_achat']} €",
+            "Coût total"     : f"{cout:.2f} €"
         })
 
     # Coût employés
     detail_employes = []
-    cout_employes = 0
-    taux_horaire = params['taux_horaire']
+    cout_employes   = 0
+    taux_horaire    = params['taux_horaire']
     for emp in employes:
         cout = emp['nombre'] * emp['heures'] * taux_horaire
         cout_employes += cout
@@ -98,13 +78,10 @@ def calculer_devis(recette_id, nb_personnes, employes, frais_fixes_supplementair
             "Coût total"   : f"{cout:.2f} €"
         })
 
-    # Frais fixes (recette + supplémentaires)
     frais_fixes_total = recette['frais_fixes'] + frais_fixes_supplementaires
-
-    # Calcul final
-    cout_total  = cout_ingredients + cout_employes + frais_fixes_total
-    prix_final  = cout_total / params['taux_charges']
-    benefice    = prix_final * params['taux_benefice']
+    cout_total        = cout_ingredients + cout_employes + frais_fixes_total
+    prix_final        = cout_total / params['taux_charges']
+    benefice          = prix_final * params['taux_benefice']
 
     return {
         "cout_ingredients"           : cout_ingredients,
@@ -120,81 +97,69 @@ def calculer_devis(recette_id, nb_personnes, employes, frais_fixes_supplementair
         "taux_horaire"               : taux_horaire
     }
 
-
 def sauvegarder_devis(nom_client, date_mariage, recette_id,
                        nb_personnes, employes, resultat, statut):
-    conn = get_connection()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        INSERT INTO devis (
-            nom_client, date_mariage, recette_id, nb_personnes,
-            cout_ingredients, cout_employes, frais_fixes,
-            cout_total, prix_final, benefice, statut
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        nom_client, str(date_mariage), recette_id, nb_personnes,
-        resultat['cout_ingredients'], resultat['cout_employes'],
-        resultat['frais_fixes_total'], resultat['cout_total'],
-        resultat['prix_final'], resultat['benefice'], statut
-    ))
+    # Si on valide → on supprime l'ancienne simulation du même client
+    if statut == "validé":
+        anciennes_simus = supabase.table("devis")\
+            .select("id")\
+            .eq("nom_client", nom_client)\
+            .eq("recette_id", recette_id)\
+            .eq("statut", "simulation")\
+            .execute()
 
-    devis_id = cursor.lastrowid
+        for sim in anciennes_simus.data:
+            supabase.table("employes_devis")\
+                .delete().eq("devis_id", sim['id']).execute()
+            supabase.table("devis")\
+                .delete().eq("id", sim['id']).execute()
 
-    params = get_parametres()
+    res = supabase.table("devis").insert({
+        "nom_client"      : nom_client,
+        "date_mariage"    : str(date_mariage),
+        "recette_id"      : recette_id,
+        "nb_personnes"    : nb_personnes,
+        "cout_ingredients": resultat['cout_ingredients'],
+        "cout_employes"   : resultat['cout_employes'],
+        "frais_fixes"     : resultat['frais_fixes_total'],
+        "cout_total"      : resultat['cout_total'],
+        "prix_final"      : resultat['prix_final'],
+        "benefice"        : resultat['benefice'],
+        "statut"          : statut
+    }).execute()
+
+    devis_id = res.data[0]['id']
+    params   = get_parametres()
+
     for emp in employes:
         cout = emp['nombre'] * emp['heures'] * params['taux_horaire']
-        cursor.execute("""
-            INSERT INTO employes_devis (devis_id, type_employe, nombre, heures, cout_total)
-            VALUES (?, ?, ?, ?, ?)
-        """, (devis_id, emp['type'], emp['nombre'], emp['heures'], cout))
+        supabase.table("employes_devis").insert({
+            "devis_id"    : devis_id,
+            "type_employe": emp['type'],
+            "nombre"      : emp['nombre'],
+            "heures"      : emp['heures'],
+            "cout_total"  : cout
+        }).execute()
 
-    conn.commit()
-    conn.close()
     return devis_id
 
-
 def valider_mariage(devis_id, recette_id, nb_personnes):
-    """Valide le mariage et met à jour le stock"""
-    conn = get_connection()
-    cursor = conn.cursor()
+    supabase.table("devis").update({"statut": "validé"}).eq("id", devis_id).execute()
 
-    cursor.execute("""
-        UPDATE devis SET statut = 'validé' WHERE id = ?
-    """, (devis_id,))
-
-    cursor.execute("""
-        SELECT produit_id, quantite_par_personne
-        FROM recette_ingredients
-        WHERE recette_id = ?
-    """, (recette_id,))
-    ingredients = cursor.fetchall()
-
+    ingredients = get_ingredients_recette(recette_id)
     for ing in ingredients:
+        produit = supabase.table("produits").select("quantite_stock")\
+            .eq("id", ing['produits']['id']).execute().data[0]
         qte_utilisee = ing['quantite_par_personne'] * nb_personnes
-        cursor.execute("""
-            UPDATE produits
-            SET quantite_stock = quantite_stock - ?,
-                date_maj = date('now')
-            WHERE id = ?
-        """, (qte_utilisee, ing['produit_id']))
+        nouvelle_qte = produit['quantite_stock'] - qte_utilisee
+        supabase.table("produits").update({
+            "quantite_stock": nouvelle_qte
+        }).eq("id", ing['produits']['id']).execute()
 
-    conn.commit()
-    conn.close()
-
-
-def get_alertes_apres_validation():
-    """Vérifie les alertes stock après validation"""
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT p.nom, p.quantite_stock, p.seuil_alerte, p.unite
-        FROM produits p
-        WHERE p.quantite_stock <= p.seuil_alerte
-    """)
-    alertes = cursor.fetchall()
-    conn.close()
-    return alertes
+def get_alertes():
+    produits = supabase.table("produits").select("*").execute()
+    return [p for p in produits.data if p['quantite_stock'] <= p['seuil_alerte']]
 
 
 # ─────────────────────────────────────────────
@@ -207,14 +172,13 @@ if not recettes:
     st.warning("⚠️ Aucune recette disponible. Créez d'abord des recettes !")
     st.stop()
 
-# ── ÉTAPE 1 : Informations de base ──
+# ── ÉTAPE 1 ──
 st.subheader("1️⃣ Informations de base")
 
 col1, col2 = st.columns(2)
 with col1:
     nom_client   = st.text_input("Nom du client", placeholder="ex: M. Ahmed")
     date_mariage = st.date_input("Date du mariage", value=date.today())
-
 with col2:
     options_recettes = {r['nom']: r for r in recettes}
     recette_choisie  = st.selectbox("Recette", list(options_recettes.keys()))
@@ -224,7 +188,7 @@ recette = options_recettes[recette_choisie]
 
 st.divider()
 
-# ── ÉTAPE 2 : Employés ──
+# ── ÉTAPE 2 ──
 st.subheader("2️⃣ Employés")
 
 if 'employes' not in st.session_state:
@@ -235,7 +199,6 @@ if 'employes' not in st.session_state:
 
 params = get_parametres()
 
-# En-tête des colonnes
 col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
 col1.markdown("**Type d'employé**")
 col2.markdown("**Nb employés**")
@@ -248,9 +211,7 @@ for i, emp in enumerate(st.session_state.employes):
     with col1:
         type_emp = st.text_input(
             "Type", value=emp['type'],
-            key=f"type_{i}",
-            label_visibility="collapsed",
-            placeholder="ex: Serveurs"
+            key=f"type_{i}", label_visibility="collapsed"
         )
     with col2:
         nb_emp = st.number_input(
@@ -262,25 +223,22 @@ for i, emp in enumerate(st.session_state.employes):
         nb_h = st.number_input(
             "Heures", value=float(emp['heures']),
             min_value=1.0, step=0.5,
-            key=f"h_{i}",
-            label_visibility="collapsed"
+            key=f"h_{i}", label_visibility="collapsed"
         )
     with col4:
         cout_ligne = nb_emp * nb_h * params['taux_horaire']
         st.markdown(f"**{cout_ligne:.0f} €**")
 
     employes_valides.append({
-        "type"   : type_emp,
-        "nombre" : nb_emp,
-        "heures" : nb_h
+        "type"  : type_emp,
+        "nombre": nb_emp,
+        "heures": nb_h
     })
 
 col_add, col_reset = st.columns(2)
 with col_add:
     if st.button("➕ Ajouter une ligne employé"):
-        st.session_state.employes.append(
-            {"type": "Autre", "nombre": 1, "heures": 8}
-        )
+        st.session_state.employes.append({"type": "Autre", "nombre": 1, "heures": 8})
         st.rerun()
 with col_reset:
     if st.button("🗑️ Réinitialiser employés"):
@@ -292,7 +250,7 @@ with col_reset:
 
 st.divider()
 
-# ── ÉTAPE 3 : Frais supplémentaires ──
+# ── ÉTAPE 3 ──
 st.subheader("3️⃣ Frais supplémentaires")
 
 col1, col2 = st.columns(2)
@@ -301,14 +259,13 @@ with col1:
 with col2:
     frais_supp = st.number_input(
         "Frais supplémentaires (€)",
-        min_value=0.0, step=50.0,
-        help="Transport, décoration supplémentaire..."
+        min_value=0.0, step=50.0
     )
 
 st.divider()
 
 # ─────────────────────────────────────────────
-# CALCUL ET RÉSULTAT
+# CALCUL
 # ─────────────────────────────────────────────
 
 if st.button("🧮 CALCULER LE DEVIS", type="primary", use_container_width=True):
@@ -328,7 +285,7 @@ if st.button("🧮 CALCULER LE DEVIS", type="primary", use_container_width=True)
         st.session_state.employes_snap = employes_valides
 
 # ─────────────────────────────────────────────
-# AFFICHAGE DU RÉSULTAT
+# RÉSULTAT
 # ─────────────────────────────────────────────
 
 if st.session_state.get('devis_calcule'):
@@ -340,7 +297,6 @@ if st.session_state.get('devis_calcule'):
         f"— {st.session_state.nb_personnes} personnes"
     )
 
-    # Résumé financier
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("🛒 Ingrédients", f"{r['cout_ingredients']:.2f} €")
     col2.metric("👨‍🍳 Employés",    f"{r['cout_employes']:.2f} €")
@@ -355,14 +311,13 @@ if st.session_state.get('devis_calcule'):
 
     st.divider()
 
-    # Détails
     with st.expander("🔍 Voir le détail des ingrédients"):
-        df_ing = pd.DataFrame(r['detail_ingredients'])
-        st.dataframe(df_ing, use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(r['detail_ingredients']),
+                     use_container_width=True, hide_index=True)
 
     with st.expander("🔍 Voir le détail des employés"):
-        df_emp = pd.DataFrame(r['detail_employes'])
-        st.dataframe(df_emp, use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(r['detail_employes']),
+                     use_container_width=True, hide_index=True)
 
     st.divider()
 
@@ -379,13 +334,13 @@ if st.session_state.get('devis_calcule'):
                 st.session_state.employes_snap,
                 r, "simulation"
             )
-            st.success(f"✅ Devis #{devis_id} sauvegardé en simulation !")
+            st.success(f"✅ Devis #{devis_id} sauvegardé !")
 
     with col2:
         if st.button("🖨️ Télécharger PDF", use_container_width=True):
             params      = get_parametres()
             recette_obj = get_recette(st.session_state.recette_id)
-            devis_id = sauvegarder_devis(
+            devis_id    = sauvegarder_devis(
                 st.session_state.nom_client,
                 st.session_state.date_mariage,
                 st.session_state.recette_id,
@@ -415,31 +370,6 @@ if st.session_state.get('devis_calcule'):
 
     with col3:
         if st.button("✅ VALIDER LE MARIAGE", type="primary", use_container_width=True):
-        
-            # --- 1. SUPPRIMER L'ANCIENNE SIMULATION ---
-            conn = get_connection()
-            cursor = conn.cursor()
-            
-            # Supprimer les employés liés à la simulation
-            cursor.execute("""
-                DELETE FROM employes_devis 
-                WHERE devis_id IN (
-                    SELECT id FROM devis 
-                    WHERE nom_client = ? AND date_mariage = ? AND statut = 'simulation'
-                )
-            """, (st.session_state.nom_client, str(st.session_state.date_mariage)))
-            
-            # Supprimer le devis de la simulation
-            cursor.execute("""
-                DELETE FROM devis 
-                WHERE nom_client = ? AND date_mariage = ? AND statut = 'simulation'
-            """, (st.session_state.nom_client, str(st.session_state.date_mariage)))
-            
-            conn.commit()
-            conn.close()
-            # ------------------------------------------
-
-            # --- 2. SAUVEGARDER LE NOUVEAU (Validé) ---
             devis_id = sauvegarder_devis(
                 st.session_state.nom_client,
                 st.session_state.date_mariage,
@@ -456,13 +386,13 @@ if st.session_state.get('devis_calcule'):
             st.success(f"✅ Mariage validé ! Devis #{devis_id} enregistré.")
             st.balloons()
 
-            alertes = get_alertes_apres_validation()
+            alertes = get_alertes()
             if alertes:
-                st.error("⚠️ PRODUITS À RÉAPPROVISIONNER APRÈS CE MARIAGE :")
+                st.error("⚠️ PRODUITS À RÉAPPROVISIONNER :")
                 for a in alertes:
                     st.warning(
                         f"🔴 **{a['nom']}** — "
-                        f"Stock restant : {a['quantite_stock']:.2f} {a['unite']} "
+                        f"Stock : {a['quantite_stock']:.2f} {a['unite']} "
                         f"(seuil : {a['seuil_alerte']} {a['unite']})"
                     )
             st.session_state.devis_calcule = False

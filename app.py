@@ -12,14 +12,41 @@ st.set_page_config(
     page_icon="🍽️",
     layout="wide"
 )
+st.markdown("""
+    <style>
+    /* Image de fond sur toute la page */
+    .stApp {
+        background-image: url("https://images.unsplash.com/photo-1555244162-803834f70033?w=1920");
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
+    }
 
+    /* Overlay sombre sur toute la page */
+    .stApp::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(44, 62, 80, 0.75);
+        z-index: 0;
+    }
+
+    /* Texte en blanc partout */
+    .stApp * {
+        color: white !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 supabase = get_client()
 
 # ─────────────────────────────────────────────
 # MOT DE PASSE
 # ─────────────────────────────────────────────
 
-MOT_DE_PASSE = "traiteur2024"
+MOT_DE_PASSE = "traiteur2026"
 
 def check_password():
     if "authentifie" not in st.session_state:

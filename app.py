@@ -12,41 +12,14 @@ st.set_page_config(
     page_icon="🍽️",
     layout="wide"
 )
-st.markdown("""
-    <style>
-    /* Image de fond sur toute la page */
-    .stApp {
-        background-image: url("https://images.unsplash.com/photo-1555244162-803834f70033?w=1920");
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
-    }
 
-    /* Overlay sombre sur toute la page */
-    .stApp::before {
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(44, 62, 80, 0.75);
-        z-index: 0;
-    }
-
-    /* Texte en blanc partout */
-    .stApp * {
-        color: white !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
 supabase = get_client()
 
 # ─────────────────────────────────────────────
 # MOT DE PASSE
 # ─────────────────────────────────────────────
 
-MOT_DE_PASSE = "traiteur2026"
+MOT_DE_PASSE = "traiteur2024"
 
 def check_password():
     if "authentifie" not in st.session_state:
@@ -59,33 +32,16 @@ def check_password():
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
 
-        # Image en fond avec titre par dessus
         st.markdown("""
-            <div style='
-                background-image: url("https://images.unsplash.com/photo-1555244162-803834f70033?w=1200");
-                background-size: cover;
-                background-position: center;
-                padding: 60px 30px;
-                border-radius: 15px;
-                margin-bottom: 20px;
-            '>
-                <div style='
-                    background: rgba(44, 62, 80, 0.82);
-                    padding: 30px;
-                    border-radius: 10px;
-                    text-align: center;
-                '>
-                    <h1 style='color: white; font-size: 52px; margin: 0;'>🍽️</h1>
-                    <h2 style='color: white; margin: 10px 0 5px 0; font-size: 26px;'>
-                        Application Traiteur
-                    </h2>
-                    <p style='color: #BDC3C7; margin: 0; font-size: 14px;'>
-                        Gestion professionnelle de vos mariages
-                    </p>
-                </div>
+            <div style='text-align: center; padding: 30px;
+                        background: linear-gradient(135deg, #2C3E50, #3498DB);
+                        border-radius: 15px; margin-bottom: 20px;'>
+                <h1 style='color: white; font-size: 48px; margin: 0;'>🍽️</h1>
+                <h2 style='color: white; margin: 10px 0 5px 0;'>Application Traiteur</h2>
+                <p style='color: #BDC3C7; margin: 0;'>Gestion professionnelle de vos mariages</p>
             </div>
         """, unsafe_allow_html=True)
-
+        st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
         mot_de_passe = st.text_input(

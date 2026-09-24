@@ -64,7 +64,7 @@ def check_password():
         st.markdown("""
             <div style='text-align: center; margin-top: 30px;'>
                 <p style='color: #BDC3C7; font-size: 12px;'>
-                    © 2024 Application Traiteur — Tous droits réservés
+                    © 2026 Application Traiteur — Tous droits réservés - Youcef ABBES
                 </p>
             </div>
         """, unsafe_allow_html=True)

@@ -22,7 +22,7 @@ supabase = get_client()
 # ─────────────────────────────────────────────
 # FONCTIONS
 # ─────────────────────────────────────────────
-
+@st.cache_data(ttl=30)
 def get_tous_devis(statut_filtre=None, client_filtre=None):
     res = supabase.table("devis")\
         .select("*, recettes(nom)")\
@@ -38,7 +38,7 @@ def get_tous_devis(statut_filtre=None, client_filtre=None):
 
     return devis
 
-
+@st.cache_data(ttl=30)
 def get_employes_devis(devis_id):
     res = supabase.table("employes_devis")\
         .select("*").eq("devis_id", devis_id).execute()
@@ -56,7 +56,7 @@ def supprimer_devis(devis_id):
     supabase.table("employes_devis").delete().eq("devis_id", devis_id).execute()
     supabase.table("devis").delete().eq("id", devis_id).execute()
 
-
+@st.cache_data(ttl=30)
 def get_stats():
     res   = supabase.table("devis").select("*").execute()
     devis = res.data

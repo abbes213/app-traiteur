@@ -16,15 +16,18 @@ supabase = get_client()
 # ─────────────────────────────────────────────
 # FONCTIONS
 # ─────────────────────────────────────────────
-
+@st.cache_data(ttl=30)
 def get_toutes_recettes():
     res = supabase.table("recettes").select("*").order("nom").execute()
     return res.data
 
+
+@st.cache_data(ttl=30)
 def get_tous_produits():
     res = supabase.table("produits").select("*").order("nom").execute()
     return res.data
 
+@st.cache_data(ttl=30)
 def get_ingredients_recette(recette_id):
     res = supabase.table("recette_ingredients")\
         .select("*, produits(nom, unite, prix_achat)")\

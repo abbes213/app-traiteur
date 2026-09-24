@@ -20,7 +20,7 @@ supabase = get_client()
 # ─────────────────────────────────────────────
 # FONCTIONS
 # ─────────────────────────────────────────────
-
+@st.cache_data(ttl=30)
 def get_parametres():
     res = supabase.table("parametres").select("*").eq("id", 1).execute()
     if not res.data:

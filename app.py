@@ -78,7 +78,7 @@ if not check_password():
 # ─────────────────────────────────────────────
 # FONCTIONS
 # ─────────────────────────────────────────────
-
+@st.cache_data(ttl=30)
 def get_stats():
     res   = supabase.table("devis").select("*").execute()
     devis = res.data
@@ -95,12 +95,12 @@ def get_stats():
         "benefice_total": benefice_total
     }
 
-
+@st.cache_data(ttl=30)
 def get_alertes():
     produits = supabase.table("produits").select("*").execute()
     return [p for p in produits.data if p['quantite_stock'] <= p['seuil_alerte']]
 
-
+@st.cache_data(ttl=30)
 def get_derniers_devis():
     res = supabase.table("devis")\
         .select("*, recettes(nom)")\
@@ -108,12 +108,12 @@ def get_derniers_devis():
         .limit(5).execute()
     return res.data
 
-
+@st.cache_data(ttl=30)
 def get_nb_produits():
     res = supabase.table("produits").select("id").execute()
     return len(res.data)
 
-
+@st.cache_data(ttl=30)
 def get_nb_recettes():
     res = supabase.table("recettes").select("id").execute()
     return len(res.data)

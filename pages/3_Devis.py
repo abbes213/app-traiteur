@@ -23,21 +23,24 @@ supabase = get_client()
 # ─────────────────────────────────────────────
 # FONCTIONS
 # ─────────────────────────────────────────────
-
+@st.cache_data(ttl=30)
 def get_toutes_recettes():
     res = supabase.table("recettes").select("*").order("nom").execute()
     return res.data
 
+@st.cache_data(ttl=30)
 def get_ingredients_recette(recette_id):
     res = supabase.table("recette_ingredients")\
         .select("*, produits(nom, unite, prix_achat, id)")\
         .eq("recette_id", recette_id).execute()
     return res.data
 
+@st.cache_data(ttl=30)
 def get_parametres():
     res = supabase.table("parametres").select("*").eq("id", 1).execute()
     return res.data[0]
 
+@st.cache_data(ttl=30)
 def get_recette(recette_id):
     res = supabase.table("recettes").select("*").eq("id", recette_id).execute()
     return res.data[0]

@@ -47,7 +47,6 @@ def supprimer_produit(id):
     # 2. On peut ensuite supprimer le produit du stock en toute sécurité
     supabase.table("produits").delete().eq("id", id).execute()
 
-@st.cache_data(ttl=30)
 def reception_stock(produit_id, quantite_achetee, nouveau_prix):
     produit = supabase.table("produits").select("quantite_stock").eq("id", produit_id).execute()
     ancienne_qte = produit.data[0]['quantite_stock']
@@ -64,7 +63,6 @@ def reception_stock(produit_id, quantite_achetee, nouveau_prix):
         "prix_achat": nouveau_prix
     }).execute()
 
-@st.cache_data(ttl=30)
 def get_alertes():
     produits = supabase.table("produits").select("*").execute()
     return [p for p in produits.data if p['quantite_stock'] <= p['seuil_alerte']]

@@ -41,26 +41,34 @@ def get_recette(recette_id):
     res = supabase.table("recettes").select("*").eq("id", recette_id).execute()
     return res.data[0]
 
-def calculer_devis(recette_id, nb_personnes, employes, frais_fixes_supplementaires):
-    params      = get_parametres()
-    ingredients = get_ingredients_recette(recette_id)
-    recette     = get_recette(recette_id)
+def calculer_devis(recettes_selectionnees, employes, frais_fixes_supplementaires):
+    params = get_parametres()
 
-    # Coût ingrédients
-    detail_ingredients = []
-    cout_ingredients   = 0
-    for ing in ingredients:
-        produit    = ing['produits']
-        qte_totale = ing['quantite_par_personne'] * nb_personnes
-        cout       = qte_totale * produit['prix_achat']
-        cout_ingredients += cout
-        detail_ingredients.append({
-            "Ingrédient"     : produit['nom'],
-            "Qté / personne" : f"{ing['quantite_par_personne']} {produit['unite']}",
-            "Qté totale"     : f"{qte_totale:.2f} {produit['unite']}",
-            "Prix achat"     : f"{produit['prix_achat']} €",
-            "Coût total"     : f"{cout:.2f} €"
-        })
+    # Coût ingrédients et frais fixes cumulés sur toutes les recettes choisies
+    detail_ingredients  = []
+    cout_ingredients    = 0
+    frais_fixes_recette = 0
+
+    for item in recettes_selectionnees:
+        recette_id   = item['id']
+        nb_personnes = item['nb_personnes']
+        recette      = get_recette(recette_id)
+        ingredients  = get_ingredients_recette(recette_id)
+
+        frais_fixes_recette += recette['frais_fixes']
+
+        for ing in ingredients:
+            produit    = ing['produits']
+            qte_totale = ing['quantite_par_personne'] * nb_personnes
+            cout       = qte_totale * produit['prix_achat']
+            cout_ingredients += cout
+            detail_ingredients.append({
+                "Ingrédient"     : f"{produit['nom']} ({recette['nom']} - {nb_personnes}p)",
+                "Qté / personne" : f"{ing['quantite_par_personne']} {produit['unite']}",
+                "Qté totale"     : f"{qte_totale:.2f} {produit['unite']}",
+                "Prix achat"     : f"{produit['prix_achat']} €",
+                "Coût total"     : f"{cout:.2f} €"
+            })
 
     # Coût employés
     detail_employes = []
@@ -77,7 +85,7 @@ def calculer_devis(recette_id, nb_personnes, employes, frais_fixes_supplementair
             "Coût total"   : f"{cout:.2f} €"
         })
 
-    frais_fixes_total = recette['frais_fixes'] + frais_fixes_supplementaires
+    frais_fixes_total = frais_fixes_recette + frais_fixes_supplementaires
     cout_total        = cout_ingredients + cout_employes + frais_fixes_total
     prix_final        = cout_total / params['taux_charges']
     benefice          = prix_final * params['taux_benefice']
@@ -85,7 +93,7 @@ def calculer_devis(recette_id, nb_personnes, employes, frais_fixes_supplementair
     return {
         "cout_ingredients"           : cout_ingredients,
         "cout_employes"              : cout_employes,
-        "frais_fixes_recette"        : recette['frais_fixes'],
+        "frais_fixes_recette"        : frais_fixes_recette,
         "frais_fixes_supplementaires": frais_fixes_supplementaires,
         "frais_fixes_total"          : frais_fixes_total,
         "cout_total"                 : cout_total,
@@ -96,29 +104,30 @@ def calculer_devis(recette_id, nb_personnes, employes, frais_fixes_supplementair
         "taux_horaire"               : taux_horaire
     }
 
-def sauvegarder_devis(nom_client, date_mariage, recette_id,
-                       nb_personnes, employes, resultat, statut):
+def sauvegarder_devis(nom_client, date_mariage, recettes_selectionnees,
+                      employes, resultat, statut):
+
+    premiere_recette_id = recettes_selectionnees[0]['id']
+    total_personnes     = sum(r['nb_personnes'] for r in recettes_selectionnees)
 
     # Si on valide → on supprime l'ancienne simulation du même client
     if statut == "validé":
         anciennes_simus = supabase.table("devis")\
             .select("id")\
             .eq("nom_client", nom_client)\
-            .eq("recette_id", recette_id)\
             .eq("statut", "simulation")\
             .execute()
 
         for sim in anciennes_simus.data:
-            supabase.table("employes_devis")\
-                .delete().eq("devis_id", sim['id']).execute()
-            supabase.table("devis")\
-                .delete().eq("id", sim['id']).execute()
+            supabase.table("devis_recettes").delete().eq("devis_id", sim['id']).execute()
+            supabase.table("employes_devis").delete().eq("devis_id", sim['id']).execute()
+            supabase.table("devis").delete().eq("id", sim['id']).execute()
 
     res = supabase.table("devis").insert({
         "nom_client"      : nom_client,
         "date_mariage"    : str(date_mariage),
-        "recette_id"      : recette_id,
-        "nb_personnes"    : nb_personnes,
+        "recette_id"      : premiere_recette_id,
+        "nb_personnes"    : total_personnes,
         "cout_ingredients": resultat['cout_ingredients'],
         "cout_employes"   : resultat['cout_employes'],
         "frais_fixes"     : resultat['frais_fixes_total'],
@@ -131,6 +140,15 @@ def sauvegarder_devis(nom_client, date_mariage, recette_id,
     devis_id = res.data[0]['id']
     params   = get_parametres()
 
+    # Enregistrer chaque recette choisie et son nombre de personnes
+    for r_sel in recettes_selectionnees:
+        supabase.table("devis_recettes").insert({
+            "devis_id"    : devis_id,
+            "recette_id"  : r_sel['id'],
+            "nb_personnes": r_sel['nb_personnes']
+        }).execute()
+
+    # Enregistrer les employés
     for emp in employes:
         cout = emp['nombre'] * emp['heures'] * params['taux_horaire']
         supabase.table("employes_devis").insert({
@@ -143,18 +161,19 @@ def sauvegarder_devis(nom_client, date_mariage, recette_id,
 
     return devis_id
 
-def valider_mariage(devis_id, recette_id, nb_personnes):
+def valider_mariage(devis_id, recettes_selectionnees):
     supabase.table("devis").update({"statut": "validé"}).eq("id", devis_id).execute()
 
-    ingredients = get_ingredients_recette(recette_id)
-    for ing in ingredients:
-        produit = supabase.table("produits").select("quantite_stock")\
-            .eq("id", ing['produits']['id']).execute().data[0]
-        qte_utilisee = ing['quantite_par_personne'] * nb_personnes
-        nouvelle_qte = produit['quantite_stock'] - qte_utilisee
-        supabase.table("produits").update({
-            "quantite_stock": nouvelle_qte
-        }).eq("id", ing['produits']['id']).execute()
+    for r_sel in recettes_selectionnees:
+        ingredients = get_ingredients_recette(r_sel['id'])
+        for ing in ingredients:
+            produit = supabase.table("produits").select("quantite_stock")\
+                .eq("id", ing['produits']['id']).execute().data[0]
+            qte_utilisee = ing['quantite_par_personne'] * r_sel['nb_personnes']
+            nouvelle_qte = produit['quantite_stock'] - qte_utilisee
+            supabase.table("produits").update({
+                "quantite_stock": nouvelle_qte
+            }).eq("id", ing['produits']['id']).execute()
 
 def get_alertes():
     produits = supabase.table("produits").select("*").execute()
@@ -171,19 +190,66 @@ if not recettes:
     st.warning("⚠️ Aucune recette disponible. Créez d'abord des recettes !")
     st.stop()
 
+options_recettes = {r['nom']: r for r in recettes}
+noms_recettes    = list(options_recettes.keys())
+
 # ── ÉTAPE 1 ──
-st.subheader("1️⃣ Informations de base")
+st.subheader("1️⃣ Informations de base & Recettes")
 
 col1, col2 = st.columns(2)
 with col1:
-    nom_client   = st.text_input("Nom du client", placeholder="ex: M. Ahmed")
-    date_mariage = st.date_input("Date du mariage", value=date.today())
+    nom_client = st.text_input("Nom du client", placeholder="ex: M. Ahmed")
 with col2:
-    options_recettes = {r['nom']: r for r in recettes}
-    recette_choisie  = st.selectbox("Recette", list(options_recettes.keys()))
-    nb_personnes     = st.number_input("Nombre de personnes", min_value=1, step=1, value=100)
+    date_mariage = st.date_input("Date du mariage", value=date.today())
 
-recette = options_recettes[recette_choisie]
+st.markdown("**📋 Choix des recettes et du nombre de personnes :**")
+
+if 'lignes_recettes' not in st.session_state:
+    st.session_state.lignes_recettes = [
+        {"nom": noms_recettes[0], "nb_personnes": 100}
+    ]
+
+recettes_valides = []
+frais_fixes_cumules = 0
+
+for i, ligne in enumerate(st.session_state.lignes_recettes):
+    col_r, col_p = st.columns([3, 2])
+    with col_r:
+        index_defaut = noms_recettes.index(ligne['nom']) if ligne['nom'] in noms_recettes else 0
+        recette_nom_choisie = st.selectbox(
+            f"Recette #{i+1}",
+            noms_recettes,
+            index=index_defaut,
+            key=f"rec_{i}"
+        )
+    with col_p:
+        nb_pers = st.number_input(
+            f"Nombre de personnes (Recette #{i+1})",
+            min_value=1,
+            step=1,
+            value=int(ligne['nb_personnes']),
+            key=f"pers_{i}"
+        )
+
+    rec_obj = options_recettes[recette_nom_choisie]
+    frais_fixes_cumules += rec_obj['frais_fixes']
+    recettes_valides.append({
+        "id"          : rec_obj['id'],
+        "nom"         : rec_obj['nom'],
+        "nb_personnes": nb_pers,
+        "frais_fixes" : rec_obj['frais_fixes']
+    })
+
+col_add_r, col_reset_r = st.columns(2)
+with col_add_r:
+    if st.button("➕ Ajouter une autre recette"):
+        st.session_state.lignes_recettes.append({"nom": noms_recettes[0], "nb_personnes": 100})
+        st.rerun()
+with col_reset_r:
+    if len(st.session_state.lignes_recettes) > 1:
+        if st.button("🗑️ Garder une seule recette"):
+            st.session_state.lignes_recettes = [{"nom": noms_recettes[0], "nb_personnes": 100}]
+            st.rerun()
 
 st.divider()
 
@@ -254,7 +320,7 @@ st.subheader("3️⃣ Frais supplémentaires")
 
 col1, col2 = st.columns(2)
 with col1:
-    st.info(f"Frais fixes recette : **{recette['frais_fixes']} €**")
+    st.info(f"Frais fixes des recettes sélectionnées : **{frais_fixes_cumules} €**")
 with col2:
     frais_supp = st.number_input(
         "Frais supplémentaires (€)",
@@ -272,29 +338,29 @@ if st.button("🧮 CALCULER LE DEVIS", type="primary", use_container_width=True)
         st.error("❌ Le nom du client est obligatoire !")
     else:
         resultat = calculer_devis(
-            recette['id'], nb_personnes,
-            employes_valides, frais_supp
+            recettes_valides,
+            employes_valides,
+            frais_supp
         )
-        st.session_state.resultat      = resultat
-        st.session_state.devis_calcule = True
-        st.session_state.nom_client    = nom_client
-        st.session_state.date_mariage  = date_mariage
-        st.session_state.recette_id    = recette['id']
-        st.session_state.nb_personnes  = nb_personnes
-        st.session_state.employes_snap = employes_valides
+        st.session_state.resultat              = resultat
+        st.session_state.devis_calcule         = True
+        st.session_state.nom_client            = nom_client
+        st.session_state.date_mariage          = date_mariage
+        st.session_state.recettes_selectionnees = recettes_valides
+        st.session_state.employes_snap         = employes_valides
 
 # ─────────────────────────────────────────────
 # RÉSULTAT
 # ─────────────────────────────────────────────
 
 if st.session_state.get('devis_calcule'):
-    r = st.session_state.resultat
+    r      = st.session_state.resultat
+    r_list = st.session_state.recettes_selectionnees
+    resume_recettes = " + ".join([f"{x['nom']} ({x['nb_personnes']} pers.)" for x in r_list])
+    total_pers      = sum(x['nb_personnes'] for x in r_list)
 
     st.success("✅ Devis calculé avec succès !")
-    st.subheader(
-        f"📄 Devis — {st.session_state.nom_client} "
-        f"— {st.session_state.nb_personnes} personnes"
-    )
+    st.subheader(f"📄 Devis — {st.session_state.nom_client} — {resume_recettes}")
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("🛒 Ingrédients", f"{r['cout_ingredients']:.2f} €")
@@ -328,8 +394,7 @@ if st.session_state.get('devis_calcule'):
             devis_id = sauvegarder_devis(
                 st.session_state.nom_client,
                 st.session_state.date_mariage,
-                st.session_state.recette_id,
-                st.session_state.nb_personnes,
+                r_list,
                 st.session_state.employes_snap,
                 r, "simulation"
             )
@@ -337,21 +402,19 @@ if st.session_state.get('devis_calcule'):
 
     with col2:
         if st.button("🖨️ Télécharger PDF", use_container_width=True):
-            params      = get_parametres()
-            recette_obj = get_recette(st.session_state.recette_id)
-            devis_id    = sauvegarder_devis(
+            params   = get_parametres()
+            devis_id = sauvegarder_devis(
                 st.session_state.nom_client,
                 st.session_state.date_mariage,
-                st.session_state.recette_id,
-                st.session_state.nb_personnes,
+                r_list,
                 st.session_state.employes_snap,
                 r, "simulation"
             )
             nom_fichier = generer_pdf_devis(
                 nom_client         = st.session_state.nom_client,
                 date_mariage       = st.session_state.date_mariage,
-                recette_nom        = recette_obj['nom'],
-                nb_personnes       = st.session_state.nb_personnes,
+                recette_nom        = resume_recettes,
+                nb_personnes       = total_pers,
                 detail_ingredients = r['detail_ingredients'],
                 detail_employes    = r['detail_employes'],
                 resultat           = r,
@@ -372,16 +435,11 @@ if st.session_state.get('devis_calcule'):
             devis_id = sauvegarder_devis(
                 st.session_state.nom_client,
                 st.session_state.date_mariage,
-                st.session_state.recette_id,
-                st.session_state.nb_personnes,
+                r_list,
                 st.session_state.employes_snap,
                 r, "validé"
             )
-            valider_mariage(
-                devis_id,
-                st.session_state.recette_id,
-                st.session_state.nb_personnes
-            )
+            valider_mariage(devis_id, r_list)
             st.success(f"✅ Mariage validé ! Devis #{devis_id} enregistré.")
             st.balloons()
 

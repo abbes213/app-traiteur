@@ -217,14 +217,14 @@ for i, ligne in enumerate(st.session_state.lignes_recettes):
     with col_r:
         index_defaut = noms_recettes.index(ligne['nom']) if ligne['nom'] in noms_recettes else 0
         recette_nom_choisie = st.selectbox(
-            f"Recette #{i+1}",
+            f"Recette numéro {i+1:02d}",
             noms_recettes,
             index=index_defaut,
             key=f"rec_{i}"
         )
     with col_p:
         nb_pers = st.number_input(
-            f"Nombre de personnes (Recette #{i+1})",
+            f"Nombre de personnes (Recette numéro {i+1:02d})",
             min_value=1,
             step=1,
             value=int(ligne['nb_personnes']),

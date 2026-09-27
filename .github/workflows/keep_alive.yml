@@ -1,0 +1,45 @@
+name: Garder Streamlit Actif
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+
+jobs:
+  wake-up:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Installer Python et Playwright
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Visiter et réveiller l'application
+        run: |
+          python - << 'EOF'
+          from playwright.sync_api import sync_playwright
+
+          URL = "https://app-traiteur-jklhjbvej8rwdg4t32zypk.streamlit.app/"
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True)
+              page = browser.new_page()
+              page.goto(URL, wait_until="networkidle", timeout=60000)
+              page.wait_for_timeout(5000)
+
+              for texte in ["Oui, remettez", "Yes, get this app back up"]:
+                  btn = page.locator(f"button:has-text('{texte}')")
+                  if btn.count() > 0:
+                      btn.first.click()
+                      page.wait_for_timeout(15000)
+
+              champ_mdp = page.locator("input[type='password']")
+              if champ_mdp.count() > 0:
+                  champ_mdp.fill("traiteur_mamieflore2026")
+                  btn_conn = page.locator("button:has-text('Se connecter')")
+                  if btn_conn.count() > 0:
+                      btn_conn.first.click()
+                      page.wait_for_timeout(5000)
+
+              browser.close()
+          EOF

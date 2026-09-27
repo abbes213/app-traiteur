@@ -44,7 +44,7 @@ def get_recette(recette_id):
 def calculer_devis(recettes_selectionnees, employes, frais_fixes_supplementaires):
     params = get_parametres()
 
-    # Coût ingrédients et frais fixes cumulés sur toutes les recettes choisies
+    detail_recettes     = []
     detail_ingredients  = []
     cout_ingredients    = 0
     frais_fixes_recette = 0
@@ -56,12 +56,14 @@ def calculer_devis(recettes_selectionnees, employes, frais_fixes_supplementaires
         ingredients  = get_ingredients_recette(recette_id)
 
         frais_fixes_recette += recette['frais_fixes']
+        cout_unitaire_recette = 0
 
         for ing in ingredients:
             produit    = ing['produits']
             qte_totale = ing['quantite_par_personne'] * nb_personnes
             cout       = qte_totale * produit['prix_achat']
-            cout_ingredients += cout
+            cout_ingredients      += cout
+            cout_unitaire_recette += ing['quantite_par_personne'] * produit['prix_achat']
             detail_ingredients.append({
                 "Ingrédient"     : f"{produit['nom']} ({recette['nom']} - {nb_personnes}p)",
                 "Qté / personne" : f"{ing['quantite_par_personne']} {produit['unite']}",
@@ -69,6 +71,14 @@ def calculer_devis(recettes_selectionnees, employes, frais_fixes_supplementaires
                 "Prix achat"     : f"{produit['prix_achat']} €",
                 "Coût total"     : f"{cout:.2f} €"
             })
+
+        cout_recette_total = cout_unitaire_recette * nb_personnes
+        detail_recettes.append({
+            "Recette"      : recette['nom'],
+            "Nb personnes" : f"{nb_personnes} pers.",
+            "Coût / pers." : f"{cout_unitaire_recette:.2f} €",
+            "Coût total"   : f"{cout_recette_total:.2f} €"
+        })
 
     # Coût employés
     detail_employes = []
@@ -99,6 +109,7 @@ def calculer_devis(recettes_selectionnees, employes, frais_fixes_supplementaires
         "cout_total"                 : cout_total,
         "prix_final"                 : prix_final,
         "benefice"                   : benefice,
+        "detail_recettes"            : detail_recettes,
         "detail_ingredients"         : detail_ingredients,
         "detail_employes"            : detail_employes,
         "taux_horaire"               : taux_horaire
@@ -110,7 +121,6 @@ def sauvegarder_devis(nom_client, date_mariage, recettes_selectionnees,
     premiere_recette_id = recettes_selectionnees[0]['id']
     total_personnes     = sum(r['nb_personnes'] for r in recettes_selectionnees)
 
-    # Si on valide → on supprime l'ancienne simulation du même client
     if statut == "validé":
         anciennes_simus = supabase.table("devis")\
             .select("id")\
@@ -143,7 +153,6 @@ def sauvegarder_devis(nom_client, date_mariage, recettes_selectionnees,
     devis_id = res.data[0]['id']
     params   = get_parametres()
 
-    # Enregistrer chaque recette choisie (sécurisé pour ne jamais bloquer)
     try:
         for r_sel in recettes_selectionnees:
             supabase.table("devis_recettes").insert({
@@ -154,7 +163,6 @@ def sauvegarder_devis(nom_client, date_mariage, recettes_selectionnees,
     except Exception:
         pass
 
-    # Enregistrer les employés
     for emp in employes:
         cout = emp['nombre'] * emp['heures'] * params['taux_horaire']
         supabase.table("employes_devis").insert({
@@ -166,9 +174,6 @@ def sauvegarder_devis(nom_client, date_mariage, recettes_selectionnees,
         }).execute()
 
     return devis_id
-
-
-
 
 def valider_mariage(devis_id, recettes_selectionnees):
     supabase.table("devis").update({"statut": "validé"}).eq("id", devis_id).execute()
@@ -218,7 +223,7 @@ if 'lignes_recettes' not in st.session_state:
         {"nom": noms_recettes[0], "nb_personnes": 100}
     ]
 
-recettes_valides = []
+recettes_valides    = []
 frais_fixes_cumules = 0
 
 for i, ligne in enumerate(st.session_state.lignes_recettes):
@@ -351,12 +356,12 @@ if st.button("🧮 CALCULER LE DEVIS", type="primary", use_container_width=True)
             employes_valides,
             frais_supp
         )
-        st.session_state.resultat              = resultat
-        st.session_state.devis_calcule         = True
-        st.session_state.nom_client            = nom_client
-        st.session_state.date_mariage          = date_mariage
+        st.session_state.resultat               = resultat
+        st.session_state.devis_calcule          = True
+        st.session_state.nom_client             = nom_client
+        st.session_state.date_mariage           = date_mariage
         st.session_state.recettes_selectionnees = recettes_valides
-        st.session_state.employes_snap         = employes_valides
+        st.session_state.employes_snap          = employes_valides
 
 # ─────────────────────────────────────────────
 # RÉSULTAT
@@ -372,10 +377,10 @@ if st.session_state.get('devis_calcule'):
     st.subheader(f"📄 Devis — {st.session_state.nom_client} — {resume_recettes}")
 
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("🛒 Ingrédients", f"{r['cout_ingredients']:.2f} €")
-    col2.metric("👨‍🍳 Employés",    f"{r['cout_employes']:.2f} €")
-    col3.metric("📌 Frais fixes",  f"{r['frais_fixes_total']:.2f} €")
-    col4.metric("💰 Coût total",   f"{r['cout_total']:.2f} €")
+    col1.metric("🛒 Recettes (Ingr.)", f"{r['cout_ingredients']:.2f} €")
+    col2.metric("👨‍🍳 Employés",         f"{r['cout_employes']:.2f} €")
+    col3.metric("📌 Frais fixes",       f"{r['frais_fixes_total']:.2f} €")
+    col4.metric("💰 Coût total",        f"{r['cout_total']:.2f} €")
 
     st.divider()
 
@@ -385,7 +390,11 @@ if st.session_state.get('devis_calcule'):
 
     st.divider()
 
-    with st.expander("🔍 Voir le détail des ingrédients"):
+    with st.expander("📋 Voir le détail des recettes", expanded=True):
+        st.dataframe(pd.DataFrame(r['detail_recettes']),
+                     use_container_width=True, hide_index=True)
+
+    with st.expander("🔍 Voir le détail des ingrédients (Cuisine)"):
         st.dataframe(pd.DataFrame(r['detail_ingredients']),
                      use_container_width=True, hide_index=True)
 

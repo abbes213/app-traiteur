@@ -175,15 +175,19 @@ else:
                     params     = get_parametres()
                     employes_d = get_employes_devis(d['id'])
 
+                    detail_recettes    = []
                     detail_ingredients = []
+
                     if lignes_rec:
                         for lr in lignes_rec:
-                            nom_r = lr['recettes']['nom'] if lr.get('recettes') else "Recette"
+                            nom_r = lr['recettes']['nom'] if lr.get('recettes') else "Recette archivée"
                             ings  = get_ingredients_devis(lr['recette_id'])
+                            cout_unit = 0
                             for ing in ings:
                                 produit    = ing['produits']
                                 qte_totale = ing['quantite_par_personne'] * lr['nb_personnes']
                                 cout       = qte_totale * produit['prix_achat']
+                                cout_unit += ing['quantite_par_personne'] * produit['prix_achat']
                                 detail_ingredients.append({
                                     "Ingrédient"     : f"{produit['nom']} ({nom_r} - {lr['nb_personnes']}p)",
                                     "Qté / personne" : f"{ing['quantite_par_personne']} {produit['unite']}",
@@ -191,6 +195,12 @@ else:
                                     "Prix achat"     : f"{produit['prix_achat']} €",
                                     "Coût total"     : f"{cout:.2f} €"
                                 })
+                            detail_recettes.append({
+                                "Recette"      : nom_r,
+                                "Nb personnes" : f"{lr['nb_personnes']} pers.",
+                                "Coût / pers." : f"{cout_unit:.2f} €",
+                                "Coût total"   : f"{cout_unit * lr['nb_personnes']:.2f} €"
+                            })
                     else:
                         ings = get_ingredients_devis(d['recette_id'])
                         for ing in ings:
@@ -204,6 +214,13 @@ else:
                                 "Prix achat"     : f"{produit['prix_achat']} €",
                                 "Coût total"     : f"{cout:.2f} €"
                             })
+                        cout_unit = d['cout_ingredients'] / d['nb_personnes'] if d['nb_personnes'] else 0
+                        detail_recettes.append({
+                            "Recette"      : recette_nom,
+                            "Nb personnes" : f"{d['nb_personnes']} pers.",
+                            "Coût / pers." : f"{cout_unit:.2f} €",
+                            "Coût total"   : f"{d['cout_ingredients']:.2f} €"
+                        })
 
                     detail_employes = [{
                         "Type"         : e['type_employe'],
@@ -222,6 +239,7 @@ else:
                         "cout_total"                 : d['cout_total'],
                         "prix_final"                 : d['prix_final'],
                         "benefice"                   : d['benefice'],
+                        "detail_recettes"            : detail_recettes,
                         "detail_ingredients"         : detail_ingredients,
                         "detail_employes"            : detail_employes,
                         "taux_horaire"               : params['taux_horaire']

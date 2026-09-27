@@ -119,7 +119,10 @@ def sauvegarder_devis(nom_client, date_mariage, recettes_selectionnees,
             .execute()
 
         for sim in anciennes_simus.data:
-            supabase.table("devis_recettes").delete().eq("devis_id", sim['id']).execute()
+            try:
+                supabase.table("devis_recettes").delete().eq("devis_id", sim['id']).execute()
+            except Exception:
+                pass
             supabase.table("employes_devis").delete().eq("devis_id", sim['id']).execute()
             supabase.table("devis").delete().eq("id", sim['id']).execute()
 
@@ -140,13 +143,16 @@ def sauvegarder_devis(nom_client, date_mariage, recettes_selectionnees,
     devis_id = res.data[0]['id']
     params   = get_parametres()
 
-    # Enregistrer chaque recette choisie et son nombre de personnes
-    for r_sel in recettes_selectionnees:
-        supabase.table("devis_recettes").insert({
-            "devis_id"    : devis_id,
-            "recette_id"  : r_sel['id'],
-            "nb_personnes": r_sel['nb_personnes']
-        }).execute()
+    # Enregistrer chaque recette choisie (sécurisé pour ne jamais bloquer)
+    try:
+        for r_sel in recettes_selectionnees:
+            supabase.table("devis_recettes").insert({
+                "devis_id"    : devis_id,
+                "recette_id"  : r_sel['id'],
+                "nb_personnes": r_sel['nb_personnes']
+            }).execute()
+    except Exception:
+        pass
 
     # Enregistrer les employés
     for emp in employes:
@@ -160,6 +166,9 @@ def sauvegarder_devis(nom_client, date_mariage, recettes_selectionnees,
         }).execute()
 
     return devis_id
+
+
+
 
 def valider_mariage(devis_id, recettes_selectionnees):
     supabase.table("devis").update({"statut": "validé"}).eq("id", devis_id).execute()

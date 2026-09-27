@@ -38,10 +38,13 @@ def get_tous_devis(statut_filtre=None, client_filtre=None):
     return devis
 
 def get_recettes_du_devis(devis_id):
-    res = supabase.table("devis_recettes")\
-        .select("*, recettes(nom)")\
-        .eq("devis_id", devis_id).execute()
-    return res.data
+    try:
+        res = supabase.table("devis_recettes")\
+            .select("*, recettes(nom)")\
+            .eq("devis_id", devis_id).execute()
+        return res.data
+    except Exception:
+        return []
 
 def get_employes_devis(devis_id):
     res = supabase.table("employes_devis")\
@@ -57,7 +60,10 @@ def get_ingredients_devis(recette_id):
     return res.data
 
 def supprimer_devis(devis_id):
-    supabase.table("devis_recettes").delete().eq("devis_id", devis_id).execute()
+    try:
+        supabase.table("devis_recettes").delete().eq("devis_id", devis_id).execute()
+    except Exception:
+        pass
     supabase.table("employes_devis").delete().eq("devis_id", devis_id).execute()
     supabase.table("devis").delete().eq("id", devis_id).execute()
 

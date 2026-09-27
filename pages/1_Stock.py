@@ -9,6 +9,10 @@ from database import get_client, créer_tables
 créer_tables()
 
 st.set_page_config(page_title="Gestion du Stock", page_icon="📦")
+# Vérification sécurité
+if not st.session_state.get("authentifie", False):
+    st.switch_page("app.py")
+    
 st.title("📦 Gestion du Stock")
 
 supabase = get_client()

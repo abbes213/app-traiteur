@@ -51,8 +51,15 @@ def modifier_recette(id, nom, description, frais_fixes):
     }).eq("id", id).execute()
 
 def supprimer_recette(recette_id):
+    # 1. On détache les devis existants pour qu'ils restent dans l'historique sans bloquer
+    supabase.table("devis").delete().eq("recette_id", recette_id).eq("statut", "simulation").execute()
+    supabase.table("devis").update({"recette_id": None}).eq("recette_id", recette_id).execute()
+    
+    # 2. On supprime les ingrédients liés à cette recette
     supabase.table("recette_ingredients").delete().eq("recette_id", recette_id).execute()
-    supabase.table("recettes").delete().eq("id", recette_id).execute()
+    
+    # 3. On supprime enfin la recette
+    supabase.table("recettes").delete().eq("id", recette_id).execute()    
 
 def ajouter_ingredient(recette_id, produit_id, quantite_par_personne):
     supabase.table("recette_ingredients").insert({

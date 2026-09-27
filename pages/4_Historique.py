@@ -42,13 +42,13 @@ def get_employes_devis(devis_id):
         .select("*").eq("devis_id", devis_id).execute()
     return res.data
 
-
 def get_ingredients_devis(recette_id):
+    if not recette_id:
+        return []
     res = supabase.table("recette_ingredients")\
         .select("*, produits(nom, unite, prix_achat)")\
         .eq("recette_id", recette_id).execute()
     return res.data
-
 
 def supprimer_devis(devis_id):
     supabase.table("employes_devis").delete().eq("devis_id", devis_id).execute()

@@ -319,17 +319,8 @@ for i, emp in enumerate(st.session_state.employes):
         "heures": nb_h
     })
 
-col_add, col_reset = st.columns(2)
-with col_add:
-    if st.button("➕ Ajouter une ligne employé"):
+if st.button("➕ Ajouter une ligne employé"):
         st.session_state.employes.append({"type": "Autre", "nombre": 1, "heures": 8})
-        st.rerun()
-with col_reset:
-    if st.button("🗑️ Réinitialiser employés"):
-        st.session_state.employes = [
-            {"type": "Serveurs",   "nombre": 1, "heures": 8},
-            {"type": "Cuisiniers", "nombre": 1, "heures": 8}
-        ]
         st.rerun()
 
 st.divider()

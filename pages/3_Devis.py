@@ -201,7 +201,7 @@ def get_alertes():
 recettes = get_toutes_recettes()
 
 if not recettes:
-    st.warning("⚠️ Aucune recette disponible. Créez d'abord des recettes !")
+    st.warning("⚠️️ Aucune recette disponible. Créez d'abord des recettes !")
     st.stop()
 
 options_recettes = {r['nom']: r for r in recettes}
@@ -278,15 +278,16 @@ if 'employes' not in st.session_state:
 
 params = get_parametres()
 
-col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+col1, col2, col3, col4, col5 = st.columns([3, 2, 2, 1.5, 1])
 col1.markdown("**Type d'employé**")
 col2.markdown("**Nb employés**")
 col3.markdown("**Nb heures**")
 col4.markdown("**Coût**")
+col5.markdown("**Action**")
 
 employes_valides = []
 for i, emp in enumerate(st.session_state.employes):
-    col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+    col1, col2, col3, col4, col5 = st.columns([3, 2, 2, 1.5, 1])
     with col1:
         type_emp = st.text_input(
             "Type", value=emp['type'],
@@ -307,6 +308,10 @@ for i, emp in enumerate(st.session_state.employes):
     with col4:
         cout_ligne = nb_emp * nb_h * params['taux_horaire']
         st.markdown(f"**{cout_ligne:.0f} €**")
+    with col5:
+        if st.button("❌", key=f"del_emp_{i}"):
+            st.session_state.employes.pop(i)
+            st.rerun()
 
     employes_valides.append({
         "type"  : type_emp,

@@ -164,7 +164,7 @@ col2.metric("📋 Recettes",           nb_recettes)
 col3.metric("📄 Total devis",        stats['total_devis'])
 col4.metric("✅ Mariages validés",   stats['total_valides'])
 col5.metric("💵 Chiffre d'affaires", f"{stats['ca_total']:.2f} €")
-col6.metric("🤑 Bénéfice total",     f"{stats['benefice_total']:.2f} €")
+col6.metric("🤑 Marge brute totale",     f"{stats['benefice_total']:.2f} €")
 
 st.divider()
 

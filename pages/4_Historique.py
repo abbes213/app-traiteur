@@ -98,7 +98,7 @@ col1, col2, col3, col4 = st.columns(4)
 col1.metric("📄 Total devis",        stats['total_devis'])
 col2.metric("✅ Mariages validés",   stats['total_valides'])
 col3.metric("💵 Chiffre d'affaires", f"{stats['ca_total']:.2f} €")
-col4.metric("🤑 Bénéfice total",     f"{stats['benefice_total']:.2f} €")
+col4.metric("🤑 Marge brute totale",     f"{stats['benefice_total']:.2f} €")
 
 st.divider()
 
@@ -149,7 +149,7 @@ else:
             col1, col2, col3 = st.columns(3)
             col1.metric("💰 Coût total",  f"{d['cout_total']:.2f} €")
             col2.metric("💵 Prix client", f"{d['prix_final']:.2f} €")
-            col3.metric("🤑 Bénéfice",    f"{d['benefice']:.2f} €")
+            col3.metric("🤑 Marge brute",    f"{d['benefice']:.2f} €")
 
             st.write(f"**Recette(s) :** {recette_nom}")
             st.write(f"**Date mariage :** {d['date_mariage']}")

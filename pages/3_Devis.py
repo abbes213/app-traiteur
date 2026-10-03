@@ -382,7 +382,7 @@ if st.session_state.get('devis_calcule'):
 
     col1, col2 = st.columns(2)
     col1.metric("💵 Prix final client", f"{r['prix_final']:.2f} €")
-    col2.metric("🤑 Votre bénéfice",   f"{r['benefice']:.2f} €")
+    col2.metric("🤑 Marge brute",   f"{r['benefice']:.2f} €")
 
     st.divider()
 

@@ -202,7 +202,7 @@ def generer_pdf_devis(
         ["Frais fixes",                 f"{resultat['frais_fixes_total']:.2f} €"],
         ["COÛT TOTAL",                  f"{resultat['cout_total']:.2f} €"],
         ["PRIX FINAL CLIENT",           f"{resultat['prix_final']:.2f} €"],
-        ["BÉNÉFICE TRAITEUR",           f"{resultat['benefice']:.2f} €"],
+        ["MARGE BRUTE",           f"{resultat['benefice']:.2f} €"],
     ]
 
     recap_table = Table(recap_data, colWidths=[10*cm, 6*cm])

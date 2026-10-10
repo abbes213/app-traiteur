@@ -5,8 +5,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
 import pandas as pd
 from database import get_client, créer_tables
+import importlib
+import modules.pdf_generator
+importlib.reload(modules.pdf_generator)
 from modules.pdf_generator import generer_pdf_devis
-
 créer_tables()
 
 st.set_page_config(page_title="Historique des Devis", page_icon="📁")

@@ -16,7 +16,7 @@ def generer_pdf_devis(
     detail_employes, resultat, params,
     devis_id
 ):
-    """Génère un PDF professionnel pour le devis"""
+    """Génère un PDF professionnel pour le devis avec retour à la ligne automatique"""
 
     # Créer le dossier exports si pas existant
     os.makedirs("exports", exist_ok=True)
@@ -59,29 +59,29 @@ def generer_pdf_devis(
         spaceBefore=15,
         spaceAfter=8
     )
-    style_normal = ParagraphStyle(
-        'normal',
+    style_cell_info = ParagraphStyle(
+        'cell_info',
         parent=styles['Normal'],
         fontSize=10,
-        textColor=colors.HexColor('#2C3E50'),
-        spaceAfter=4
+        leading=14,
+        textColor=colors.HexColor('#555555')
     )
-    style_total = ParagraphStyle(
-        'total',
+    style_cell_tableau = ParagraphStyle(
+        'cell_tableau',
         parent=styles['Normal'],
-        fontSize=12,
-        textColor=colors.HexColor('#27AE60'),
-        spaceAfter=4
+        fontSize=9,
+        leading=12,
+        textColor=colors.HexColor('#2C3E50')
     )
 
     # Contenu du PDF
     contenu = []
 
     # ── EN-TÊTE ──────────────────────────────────
-    contenu.append(Paragraph(f"🍽️ {params['nom_traiteur']}", style_titre))
-    if params['adresse']:
+    contenu.append(Paragraph(f"{params['nom_traiteur']}", style_titre))
+    if params.get('adresse'):
         contenu.append(Paragraph(params['adresse'], style_sous_titre))
-    if params['telephone']:
+    if params.get('telephone'):
         contenu.append(Paragraph(f"Tél : {params['telephone']}", style_sous_titre))
 
     contenu.append(Spacer(1, 0.5*cm))
@@ -92,79 +92,104 @@ def generer_pdf_devis(
     contenu.append(Paragraph(f"DEVIS N° {devis_id:04d}", style_titre))
     contenu.append(Spacer(1, 0.3*cm))
 
+    detail_recettes = resultat.get("detail_recettes", [])
+
+    # Si toutes les recettes ont le même nombre de personnes (ex: 150 pers.), on affiche juste "150 personnes"
+    if detail_recettes:
+        nb_uniques = list(set(r['Nb personnes'] for r in detail_recettes))
+        if len(nb_uniques) == 1:
+            texte_nb_personnes = nb_uniques[0].replace("pers.", "personnes")
+        else:
+            texte_nb_personnes = "<br/>".join(
+                [f"• {r['Nb personnes']} ({r['Recette']})" for r in detail_recettes]
+            )
+    else:
+        texte_nb_personnes = f"{nb_personnes} personnes"
+
+    # Retour à la ligne automatique entre chaque recette dans l'en-tête
+    recettes_formatees = recette_nom.replace(" + ", "<br/>• ")
+    if " + " in recette_nom:
+        recettes_formatees = "• " + recettes_formatees
+
     infos_data = [
-        ["Client",          nom_client],
-        ["Date du mariage", str(date_mariage)],
-        ["Recette",         recette_nom],
-        ["Nombre de personnes", f"{nb_personnes} personnes"],
-        ["Date du devis",   datetime.now().strftime("%d/%m/%Y")],
+        ["Client",              Paragraph(str(nom_client), style_cell_info)],
+        ["Date du mariage",     Paragraph(str(date_mariage), style_cell_info)],
+        ["Recette(s)",          Paragraph(recettes_formatees, style_cell_info)],
+        ["Nombre de personnes", Paragraph(texte_nb_personnes, style_cell_info)],
+        ["Date du devis",       Paragraph(datetime.now().strftime("%d/%m/%Y"), style_cell_info)],
     ]
 
-    infos_table = Table(infos_data, colWidths=[5*cm, 11*cm])
+    infos_table = Table(infos_data, colWidths=[4.5*cm, 11.5*cm])
     infos_table.setStyle(TableStyle([
-        ('FONTNAME',     (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE',     (0, 0), (-1, -1), 10),
-        ('FONTNAME',     (0, 0), (0, -1),  'Helvetica-Bold'),
-        ('TEXTCOLOR',    (0, 0), (0, -1),  colors.HexColor('#2C3E50')),
-        ('TEXTCOLOR',    (1, 0), (1, -1),  colors.HexColor('#555555')),
+        ('FONTNAME',       (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE',       (0, 0), (-1, -1), 10),
+        ('FONTNAME',       (0, 0), (0, -1),  'Helvetica-Bold'),
+        ('TEXTCOLOR',      (0, 0), (0, -1),  colors.HexColor('#2C3E50')),
+        ('VALIGN',         (0, 0), (-1, -1), 'MIDDLE'),
         ('ROWBACKGROUNDS', (0, 0), (-1, -1),
          [colors.HexColor('#F8F9FA'), colors.white]),
-        ('PADDING',      (0, 0), (-1, -1), 6),
-        ('GRID',         (0, 0), (-1, -1), 0.5, colors.HexColor('#DDDDDD')),
+        ('PADDING',        (0, 0), (-1, -1), 6),
+        ('GRID',           (0, 0), (-1, -1), 0.5, colors.HexColor('#DDDDDD')),
     ]))
     contenu.append(infos_table)
     contenu.append(Spacer(1, 0.5*cm))
 
-    # ── DÉTAIL INGRÉDIENTS ────────────────────────
-    contenu.append(Paragraph("📦 Détail des Ingrédients", style_section))
+    # ── DÉTAIL DES RECETTES ───────────────────────
+    contenu.append(Paragraph("Détail des Recettes", style_section))
 
-    ing_headers = ["Ingrédient", "Qté/pers.", "Qté totale", "Prix achat", "Coût total"]
-    ing_data    = [ing_headers]
+    rec_headers = ["Recette", "Nb personnes", "Coût / pers.", "Coût total"]
+    rec_data    = [rec_headers]
 
-    for ing in detail_ingredients:
-        ing_data.append([
-            ing["Ingrédient"],
-            ing["Qté / personne"],
-            ing["Qté totale"],
-            ing["Prix achat"],
-            ing["Coût total"]
+    if detail_recettes:
+        for rec in detail_recettes:
+            rec_data.append([
+                Paragraph(str(rec["Recette"]), style_cell_tableau),
+                str(rec["Nb personnes"]),
+                rec["Coût / pers."],
+                rec["Coût total"]
+            ])
+    else:
+        cout_unit = resultat['cout_ingredients'] / nb_personnes if nb_personnes else 0
+        rec_data.append([
+            Paragraph(str(recette_nom), style_cell_tableau),
+            f"{nb_personnes} pers.",
+            f"{cout_unit:.2f} €",
+            f"{resultat['cout_ingredients']:.2f} €"
         ])
 
-    ing_data.append([
-        "TOTAL INGRÉDIENTS", "", "", "",
+    rec_data.append([
+        "TOTAL RECETTES", "", "",
         f"{resultat['cout_ingredients']:.2f} €"
     ])
 
-    ing_table = Table(ing_data, colWidths=[4*cm, 3*cm, 3*cm, 3*cm, 3*cm])
-    ing_table.setStyle(TableStyle([
-        # Header
-        ('BACKGROUND',   (0, 0), (-1, 0),  colors.HexColor('#2C3E50')),
-        ('TEXTCOLOR',    (0, 0), (-1, 0),  colors.white),
-        ('FONTNAME',     (0, 0), (-1, 0),  'Helvetica-Bold'),
-        ('FONTSIZE',     (0, 0), (-1, -1), 9),
-        ('ALIGN',        (1, 0), (-1, -1), 'CENTER'),
-        # Lignes alternées
+    rec_table = Table(rec_data, colWidths=[7.5*cm, 2.8*cm, 2.7*cm, 3*cm])
+    rec_table.setStyle(TableStyle([
+        ('BACKGROUND',     (0, 0), (-1, 0),  colors.HexColor('#2C3E50')),
+        ('TEXTCOLOR',      (0, 0), (-1, 0),  colors.white),
+        ('FONTNAME',       (0, 0), (-1, 0),  'Helvetica-Bold'),
+        ('FONTSIZE',       (0, 0), (-1, -1), 9),
+        ('ALIGN',          (1, 0), (-1, -1), 'CENTER'),
+        ('VALIGN',         (0, 0), (-1, -1), 'MIDDLE'),
         ('ROWBACKGROUNDS', (0, 1), (-1, -2),
          [colors.white, colors.HexColor('#F8F9FA')]),
-        # Total
-        ('BACKGROUND',   (0, -1), (-1, -1), colors.HexColor('#27AE60')),
-        ('TEXTCOLOR',    (0, -1), (-1, -1), colors.white),
-        ('FONTNAME',     (0, -1), (-1, -1), 'Helvetica-Bold'),
-        ('GRID',         (0, 0),  (-1, -1), 0.5, colors.HexColor('#DDDDDD')),
-        ('PADDING',      (0, 0),  (-1, -1), 6),
+        ('BACKGROUND',     (0, -1), (-1, -1), colors.HexColor('#27AE60')),
+        ('TEXTCOLOR',      (0, -1), (-1, -1), colors.white),
+        ('FONTNAME',       (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('GRID',           (0, 0),  (-1, -1), 0.5, colors.HexColor('#DDDDDD')),
+        ('PADDING',        (0, 0),  (-1, -1), 6),
     ]))
-    contenu.append(ing_table)
+    contenu.append(rec_table)
     contenu.append(Spacer(1, 0.5*cm))
 
     # ── DÉTAIL EMPLOYÉS ───────────────────────────
-    contenu.append(Paragraph("👨‍🍳 Détail des Employés", style_section))
+    contenu.append(Paragraph("Détail des Employés", style_section))
 
     emp_headers = ["Type", "Nb employés", "Nb heures", "Taux horaire", "Coût total"]
     emp_data    = [emp_headers]
 
     for emp in detail_employes:
         emp_data.append([
-            emp["Type"],
+            Paragraph(str(emp["Type"]), style_cell_tableau),
             str(emp["Nb employés"]),
             str(emp["Nb heures"]),
             emp["Taux horaire"],
@@ -178,53 +203,52 @@ def generer_pdf_devis(
 
     emp_table = Table(emp_data, colWidths=[4*cm, 3*cm, 3*cm, 3*cm, 3*cm])
     emp_table.setStyle(TableStyle([
-        ('BACKGROUND',   (0, 0), (-1, 0),  colors.HexColor('#2C3E50')),
-        ('TEXTCOLOR',    (0, 0), (-1, 0),  colors.white),
-        ('FONTNAME',     (0, 0), (-1, 0),  'Helvetica-Bold'),
-        ('FONTSIZE',     (0, 0), (-1, -1), 9),
-        ('ALIGN',        (1, 0), (-1, -1), 'CENTER'),
+        ('BACKGROUND',     (0, 0), (-1, 0),  colors.HexColor('#2C3E50')),
+        ('TEXTCOLOR',      (0, 0), (-1, 0),  colors.white),
+        ('FONTNAME',       (0, 0), (-1, 0),  'Helvetica-Bold'),
+        ('FONTSIZE',       (0, 0), (-1, -1), 9),
+        ('ALIGN',          (1, 0), (-1, -1), 'CENTER'),
+        ('VALIGN',         (0, 0), (-1, -1), 'MIDDLE'),
         ('ROWBACKGROUNDS', (0, 1), (-1, -2),
          [colors.white, colors.HexColor('#F8F9FA')]),
-        ('BACKGROUND',   (0, -1), (-1, -1), colors.HexColor('#27AE60')),
-        ('TEXTCOLOR',    (0, -1), (-1, -1), colors.white),
-        ('FONTNAME',     (0, -1), (-1, -1), 'Helvetica-Bold'),
-        ('GRID',         (0, 0),  (-1, -1), 0.5, colors.HexColor('#DDDDDD')),
-        ('PADDING',      (0, 0),  (-1, -1), 6),
+        ('BACKGROUND',     (0, -1), (-1, -1), colors.HexColor('#27AE60')),
+        ('TEXTCOLOR',      (0, -1), (-1, -1), colors.white),
+        ('FONTNAME',       (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('GRID',           (0, 0),  (-1, -1), 0.5, colors.HexColor('#DDDDDD')),
+        ('PADDING',        (0, 0),  (-1, -1), 6),
     ]))
     contenu.append(emp_table)
     contenu.append(Spacer(1, 0.5*cm))
 
     # ── RÉCAPITULATIF FINANCIER ───────────────────
-    contenu.append(Paragraph("💰 Récapitulatif Financier", style_section))
+    contenu.append(Paragraph("Récapitulatif Financier", style_section))
 
     recap_data = [
-        ["🛒 Coût ingrédients",   f"{resultat['cout_ingredients']:.2f} €"],
-        ["👨‍🍳 Coût employés",      f"{resultat['cout_employes']:.2f} €"],
-        ["📌 Frais fixes",         f"{resultat['frais_fixes_total']:.2f} €"],
-        ["💰 COÛT TOTAL",          f"{resultat['cout_total']:.2f} €"],
-        ["💵 PRIX FINAL CLIENT",   f"{resultat['prix_final']:.2f} €"],
-        ["🤑 BÉNÉFICE TRAITEUR",   f"{resultat['benefice']:.2f} €"],
+        ["Coût recettes (ingrédients)", f"{resultat['cout_ingredients']:.2f} €"],
+        ["Coût employés",               f"{resultat['cout_employes']:.2f} €"],
+        ["Frais fixes",                 f"{resultat['frais_fixes_total']:.2f} €"],
+        ["COÛT TOTAL",                  f"{resultat['cout_total']:.2f} €"],
+        ["PRIX FINAL CLIENT",           f"{resultat['prix_final']:.2f} €"],
+        ["MARGE BRUTE",                 f"{resultat['benefice']:.2f} €"],
     ]
 
     recap_table = Table(recap_data, colWidths=[10*cm, 6*cm])
     recap_table.setStyle(TableStyle([
-        ('FONTNAME',   (0, 0),  (-1, 2),  'Helvetica'),
-        ('FONTNAME',   (0, 3),  (-1, -1), 'Helvetica-Bold'),
-        ('FONTSIZE',   (0, 0),  (-1, -1), 11),
-        ('ALIGN',      (1, 0),  (1, -1),  'RIGHT'),
-        ('ROWBACKGROUNDS', (0, 0), (-1, 2),
+        ('FONTNAME',       (0, 0),  (-1, 2),  'Helvetica'),
+        ('FONTNAME',       (0, 3),  (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE',       (0, 0),  (-1, -1), 11),
+        ('ALIGN',          (1, 0),  (1, -1),  'RIGHT'),
+        ('VALIGN',         (0, 0),  (-1, -1), 'MIDDLE'),
+        ('ROWBACKGROUNDS', (0, 0),  (-1, 2),
          [colors.white, colors.HexColor('#F8F9FA'), colors.white]),
-        # Coût total
-        ('BACKGROUND', (0, 3),  (-1, 3),  colors.HexColor('#2C3E50')),
-        ('TEXTCOLOR',  (0, 3),  (-1, 3),  colors.white),
-        # Prix final
-        ('BACKGROUND', (0, 4),  (-1, 4),  colors.HexColor('#2980B9')),
-        ('TEXTCOLOR',  (0, 4),  (-1, 4),  colors.white),
-        # Bénéfice
-        ('BACKGROUND', (0, 5),  (-1, 5),  colors.HexColor('#27AE60')),
-        ('TEXTCOLOR',  (0, 5),  (-1, 5),  colors.white),
-        ('GRID',       (0, 0),  (-1, -1), 0.5, colors.HexColor('#DDDDDD')),
-        ('PADDING',    (0, 0),  (-1, -1), 8),
+        ('BACKGROUND',     (0, 3),  (-1, 3),  colors.HexColor('#2C3E50')),
+        ('TEXTCOLOR',      (0, 3),  (-1, 3),  colors.white),
+        ('BACKGROUND',     (0, 4),  (-1, 4),  colors.HexColor('#2980B9')),
+        ('TEXTCOLOR',      (0, 4),  (-1, 4),  colors.white),
+        ('BACKGROUND',     (0, 5),  (-1, 5),  colors.HexColor('#27AE60')),
+        ('TEXTCOLOR',      (0, 5),  (-1, 5),  colors.white),
+        ('GRID',           (0, 0),  (-1, -1), 0.5, colors.HexColor('#DDDDDD')),
+        ('PADDING',        (0, 0),  (-1, -1), 8),
     ]))
     contenu.append(recap_table)
     contenu.append(Spacer(1, 1*cm))

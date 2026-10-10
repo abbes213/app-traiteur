@@ -6,8 +6,10 @@ import streamlit as st
 import pandas as pd
 from database import get_client, créer_tables
 from datetime import date
+import importlib
+import modules.pdf_generator
+importlib.reload(modules.pdf_generator)
 from modules.pdf_generator import generer_pdf_devis
-
 créer_tables()
 
 st.set_page_config(page_title="Générateur de Devis", page_icon="🧮")
@@ -119,7 +121,8 @@ def sauvegarder_devis(nom_client, date_mariage, recettes_selectionnees,
                       employes, resultat, statut):
 
     premiere_recette_id = recettes_selectionnees[0]['id']
-    total_personnes     = sum(r['nb_personnes'] for r in recettes_selectionnees)
+    nb_uniques = set(r['nb_personnes'] for r in recettes_selectionnees)
+    total_personnes = recettes_selectionnees[0]['nb_personnes'] if len(nb_uniques) == 1 else sum(r['nb_personnes'] for r in recettes_selectionnees)
 
     if statut == "validé":
         anciennes_simus = supabase.table("devis")\

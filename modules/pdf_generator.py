@@ -16,7 +16,7 @@ def generer_pdf_devis(
     detail_employes, resultat, params,
     devis_id
 ):
-    """Génère un PDF professionnel pour le devis"""
+    """Génère un PDF professionnel pour le devis avec retour à la ligne automatique"""
 
     # Créer le dossier exports si pas existant
     os.makedirs("exports", exist_ok=True)
@@ -59,6 +59,20 @@ def generer_pdf_devis(
         spaceBefore=15,
         spaceAfter=8
     )
+    style_cell_info = ParagraphStyle(
+        'cell_info',
+        parent=styles['Normal'],
+        fontSize=10,
+        leading=14,
+        textColor=colors.HexColor('#555555')
+    )
+    style_cell_tableau = ParagraphStyle(
+        'cell_tableau',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=12,
+        textColor=colors.HexColor('#2C3E50')
+    )
 
     # Contenu du PDF
     contenu = []
@@ -79,28 +93,39 @@ def generer_pdf_devis(
     contenu.append(Spacer(1, 0.3*cm))
 
     detail_recettes = resultat.get("detail_recettes", [])
-    if len(detail_recettes) > 1:
-        texte_nb_personnes = " / ".join(
-            [f"{r['Nb personnes']} ({r['Recette']})" for r in detail_recettes]
-        )
+
+    # Si toutes les recettes ont le même nombre de personnes (ex: 150 pers.), on affiche juste "150 personnes"
+    if detail_recettes:
+        nb_uniques = list(set(r['Nb personnes'] for r in detail_recettes))
+        if len(nb_uniques) == 1:
+            texte_nb_personnes = nb_uniques[0].replace("pers.", "personnes")
+        else:
+            texte_nb_personnes = "<br/>".join(
+                [f"• {r['Nb personnes']} ({r['Recette']})" for r in detail_recettes]
+            )
     else:
         texte_nb_personnes = f"{nb_personnes} personnes"
 
+    # Retour à la ligne automatique entre chaque recette dans l'en-tête
+    recettes_formatees = recette_nom.replace(" + ", "<br/>• ")
+    if " + " in recette_nom:
+        recettes_formatees = "• " + recettes_formatees
+
     infos_data = [
-        ["Client",              nom_client],
-        ["Date du mariage",     str(date_mariage)],
-        ["Recette(s)",          recette_nom],
-        ["Nombre de personnes", texte_nb_personnes],
-        ["Date du devis",       datetime.now().strftime("%d/%m/%Y")],
+        ["Client",              Paragraph(str(nom_client), style_cell_info)],
+        ["Date du mariage",     Paragraph(str(date_mariage), style_cell_info)],
+        ["Recette(s)",          Paragraph(recettes_formatees, style_cell_info)],
+        ["Nombre de personnes", Paragraph(texte_nb_personnes, style_cell_info)],
+        ["Date du devis",       Paragraph(datetime.now().strftime("%d/%m/%Y"), style_cell_info)],
     ]
 
-    infos_table = Table(infos_data, colWidths=[5*cm, 11*cm])
+    infos_table = Table(infos_data, colWidths=[4.5*cm, 11.5*cm])
     infos_table.setStyle(TableStyle([
         ('FONTNAME',       (0, 0), (-1, -1), 'Helvetica'),
         ('FONTSIZE',       (0, 0), (-1, -1), 10),
         ('FONTNAME',       (0, 0), (0, -1),  'Helvetica-Bold'),
         ('TEXTCOLOR',      (0, 0), (0, -1),  colors.HexColor('#2C3E50')),
-        ('TEXTCOLOR',      (1, 0), (1, -1),  colors.HexColor('#555555')),
+        ('VALIGN',         (0, 0), (-1, -1), 'MIDDLE'),
         ('ROWBACKGROUNDS', (0, 0), (-1, -1),
          [colors.HexColor('#F8F9FA'), colors.white]),
         ('PADDING',        (0, 0), (-1, -1), 6),
@@ -118,7 +143,7 @@ def generer_pdf_devis(
     if detail_recettes:
         for rec in detail_recettes:
             rec_data.append([
-                rec["Recette"],
+                Paragraph(str(rec["Recette"]), style_cell_tableau),
                 str(rec["Nb personnes"]),
                 rec["Coût / pers."],
                 rec["Coût total"]
@@ -126,7 +151,7 @@ def generer_pdf_devis(
     else:
         cout_unit = resultat['cout_ingredients'] / nb_personnes if nb_personnes else 0
         rec_data.append([
-            recette_nom,
+            Paragraph(str(recette_nom), style_cell_tableau),
             f"{nb_personnes} pers.",
             f"{cout_unit:.2f} €",
             f"{resultat['cout_ingredients']:.2f} €"
@@ -137,13 +162,14 @@ def generer_pdf_devis(
         f"{resultat['cout_ingredients']:.2f} €"
     ])
 
-    rec_table = Table(rec_data, colWidths=[6*cm, 3.5*cm, 3.5*cm, 3*cm])
+    rec_table = Table(rec_data, colWidths=[7.5*cm, 2.8*cm, 2.7*cm, 3*cm])
     rec_table.setStyle(TableStyle([
         ('BACKGROUND',     (0, 0), (-1, 0),  colors.HexColor('#2C3E50')),
         ('TEXTCOLOR',      (0, 0), (-1, 0),  colors.white),
         ('FONTNAME',       (0, 0), (-1, 0),  'Helvetica-Bold'),
         ('FONTSIZE',       (0, 0), (-1, -1), 9),
         ('ALIGN',          (1, 0), (-1, -1), 'CENTER'),
+        ('VALIGN',         (0, 0), (-1, -1), 'MIDDLE'),
         ('ROWBACKGROUNDS', (0, 1), (-1, -2),
          [colors.white, colors.HexColor('#F8F9FA')]),
         ('BACKGROUND',     (0, -1), (-1, -1), colors.HexColor('#27AE60')),
@@ -163,7 +189,7 @@ def generer_pdf_devis(
 
     for emp in detail_employes:
         emp_data.append([
-            emp["Type"],
+            Paragraph(str(emp["Type"]), style_cell_tableau),
             str(emp["Nb employés"]),
             str(emp["Nb heures"]),
             emp["Taux horaire"],
@@ -182,6 +208,7 @@ def generer_pdf_devis(
         ('FONTNAME',       (0, 0), (-1, 0),  'Helvetica-Bold'),
         ('FONTSIZE',       (0, 0), (-1, -1), 9),
         ('ALIGN',          (1, 0), (-1, -1), 'CENTER'),
+        ('VALIGN',         (0, 0), (-1, -1), 'MIDDLE'),
         ('ROWBACKGROUNDS', (0, 1), (-1, -2),
          [colors.white, colors.HexColor('#F8F9FA')]),
         ('BACKGROUND',     (0, -1), (-1, -1), colors.HexColor('#27AE60')),
@@ -202,7 +229,7 @@ def generer_pdf_devis(
         ["Frais fixes",                 f"{resultat['frais_fixes_total']:.2f} €"],
         ["COÛT TOTAL",                  f"{resultat['cout_total']:.2f} €"],
         ["PRIX FINAL CLIENT",           f"{resultat['prix_final']:.2f} €"],
-        ["MARGE BRUTE",           f"{resultat['benefice']:.2f} €"],
+        ["MARGE BRUTE",                 f"{resultat['benefice']:.2f} €"],
     ]
 
     recap_table = Table(recap_data, colWidths=[10*cm, 6*cm])
@@ -211,6 +238,7 @@ def generer_pdf_devis(
         ('FONTNAME',       (0, 3),  (-1, -1), 'Helvetica-Bold'),
         ('FONTSIZE',       (0, 0),  (-1, -1), 11),
         ('ALIGN',          (1, 0),  (1, -1),  'RIGHT'),
+        ('VALIGN',         (0, 0),  (-1, -1), 'MIDDLE'),
         ('ROWBACKGROUNDS', (0, 0),  (-1, 2),
          [colors.white, colors.HexColor('#F8F9FA'), colors.white]),
         ('BACKGROUND',     (0, 3),  (-1, 3),  colors.HexColor('#2C3E50')),

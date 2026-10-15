@@ -113,10 +113,10 @@ def generer_pdf_devis(
 
     infos_data = [
         ["Client",              Paragraph(str(nom_client), style_cell_info)],
-        ["Date du mariage",     Paragraph(str(date_mariage), style_cell_info)],
-        ["Recette(s)",          Paragraph(recettes_formatees, style_cell_info)],
-        ["Nombre de personnes", Paragraph(texte_nb_personnes, style_cell_info)],
-        ["Date du devis",       Paragraph(datetime.now().strftime("%d/%m/%Y"), style_cell_info)],
+        ["Date de l'événement", Paragraph(str(date_mariage), style_cell_info)],
+        ["Prestation(s)",       Paragraph(recettes_formatees, style_cell_info)],
+        ["Nombre de convives",  Paragraph(texte_nb_personnes, style_cell_info)],
+        ["Date d'édition",      Paragraph(datetime.now().strftime("%d/%m/%Y"), style_cell_info)],
     ]
 
     infos_table = Table(infos_data, colWidths=[4.5*cm, 11.5*cm])
@@ -192,7 +192,7 @@ def generer_pdf_devis(
             Paragraph(str(emp["Type"]), style_cell_tableau),
             str(emp["Nb employés"]),
             str(emp["Nb heures"]),
-            emp["Taux horaire"],
+            emp.get("Taux horaire", f"{params.get('taux_horaire', 0)} €/h"),
             emp["Coût total"]
         ])
 
@@ -220,33 +220,38 @@ def generer_pdf_devis(
     contenu.append(emp_table)
     contenu.append(Spacer(1, 0.5*cm))
 
-    # ── RÉCAPITULATIF FINANCIER ───────────────────
+    # ── RÉCAPITULATIF FINANCIER (NOUVELLE LOGIQUE COMPTABLE) ──
     contenu.append(Paragraph("Récapitulatif Financier", style_section))
 
+    marge_brute = resultat.get('marge_brute', resultat['prix_final'] - resultat['cout_ingredients'])
+
     recap_data = [
-        ["Coût recettes (ingrédients)", f"{resultat['cout_ingredients']:.2f} €"],
-        ["Coût employés",               f"{resultat['cout_employes']:.2f} €"],
-        ["Frais fixes",                 f"{resultat['frais_fixes_total']:.2f} €"],
-        ["COÛT TOTAL",                  f"{resultat['cout_total']:.2f} €"],
-        ["PRIX FINAL CLIENT",           f"{resultat['prix_final']:.2f} €"],
-        ["MARGE BRUTE",                 f"{resultat['benefice']:.2f} €"],
+        ["Coût matières premières (Ingrédients)", f"{resultat['cout_ingredients']:.2f} €"],
+        ["PRIX FINAL FACTURÉ AU CLIENT", f"{resultat['prix_final']:.2f} €"],
+        ["MARGE BRUTE (Sur matière)", f"{marge_brute:.2f} €"],
+        ["", ""],
+        ["Déduction : Main d'œuvre estimée", f"- {resultat['cout_employes']:.2f} €"],
+        ["Déduction : Frais logistiques et annexes", f"- {resultat['frais_fixes_total']:.2f} €"],
+        ["RÉSULTAT NET (Bénéfice final)", f"{resultat['benefice']:.2f} €"],
     ]
 
     recap_table = Table(recap_data, colWidths=[10*cm, 6*cm])
     recap_table.setStyle(TableStyle([
         ('FONTNAME',       (0, 0),  (-1, 2),  'Helvetica'),
-        ('FONTNAME',       (0, 3),  (-1, -1), 'Helvetica-Bold'),
+        ('FONTNAME',       (0, 1),  (-1, 1),  'Helvetica-Bold'),
         ('FONTSIZE',       (0, 0),  (-1, -1), 11),
         ('ALIGN',          (1, 0),  (1, -1),  'RIGHT'),
         ('VALIGN',         (0, 0),  (-1, -1), 'MIDDLE'),
-        ('ROWBACKGROUNDS', (0, 0),  (-1, 2),
-         [colors.white, colors.HexColor('#F8F9FA'), colors.white]),
-        ('BACKGROUND',     (0, 3),  (-1, 3),  colors.HexColor('#2C3E50')),
-        ('TEXTCOLOR',      (0, 3),  (-1, 3),  colors.white),
-        ('BACKGROUND',     (0, 4),  (-1, 4),  colors.HexColor('#2980B9')),
-        ('TEXTCOLOR',      (0, 4),  (-1, 4),  colors.white),
-        ('BACKGROUND',     (0, 5),  (-1, 5),  colors.HexColor('#27AE60')),
-        ('TEXTCOLOR',      (0, 5),  (-1, 5),  colors.white),
+        ('ROWBACKGROUNDS', (0, 0),  (-1, 3),
+         [colors.white, colors.white, colors.HexColor('#F8F9FA'), colors.white]),
+        ('BACKGROUND',     (0, 1),  (-1, 1),  colors.HexColor('#2980B9')),
+        ('TEXTCOLOR',      (0, 1),  (-1, 1),  colors.white),
+        ('BACKGROUND',     (0, 2),  (-1, 2),  colors.HexColor('#27AE60')),
+        ('TEXTCOLOR',      (0, 2),  (-1, 2),  colors.white),
+        ('TEXTCOLOR',      (0, 4),  (-1, 5),  colors.HexColor('#E74C3C')), # Rouge pour les déductions
+        ('BACKGROUND',     (0, 6),  (-1, 6),  colors.HexColor('#2C3E50')),
+        ('TEXTCOLOR',      (0, 6),  (-1, 6),  colors.white),
+        ('FONTNAME',       (0, 6),  (-1, 6),  'Helvetica-Bold'),
         ('GRID',           (0, 0),  (-1, -1), 0.5, colors.HexColor('#DDDDDD')),
         ('PADDING',        (0, 0),  (-1, -1), 8),
     ]))

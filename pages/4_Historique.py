@@ -28,11 +28,12 @@ div[data-testid="stMetricLabel"] > div { color: #64748B !important; font-size: 0
 div[data-testid="stMetricValue"] > div { font-family: 'JetBrains Mono', monospace !important; color: #0F172A !important; font-size: 1.55rem !important; font-weight: 600 !important; }
 div[data-testid="stVerticalBlockBorderWrapper"] { background-color: #FFFFFF; border: 1px solid #E2E8F0 !important; border-radius: 12px !important; padding: 8px; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03); }
 div[data-testid="stExpander"] { background-color: #FFFFFF; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; margin-bottom: 10px; }
+.stButton > button[kind="primary"] { background-color: #0F172A !important; color: #FFFFFF !important; border: none !important; border-radius: 8px !important; font-weight: 600 !important; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("Historique des devis")
-st.caption("Suivi financier, réédition des documents PDF et analyse des performances par utilisateur.")
+st.caption("Suivi financier, validation des simulations et réédition des documents PDF.")
 
 supabase = get_client()
 
@@ -53,7 +54,7 @@ def get_employes_devis(devis_id):
 
 def get_ingredients_devis(recette_id):
     if not recette_id: return []
-    return supabase.table("recette_ingredients").select("*, produits(nom, unite, prix_achat)").eq("recette_id", recette_id).execute().data
+    return supabase.table("recette_ingredients").select("*, produits(nom, unite, prix_achat, id)").eq("recette_id", recette_id).execute().data
 
 def supprimer_devis(devis_id):
     try: supabase.table("devis_recettes").delete().eq("devis_id", devis_id).execute()
@@ -62,6 +63,25 @@ def supprimer_devis(devis_id):
     supabase.table("devis").delete().eq("id", devis_id).execute()
 
 def get_parametres(): return supabase.table("parametres").select("*").eq("id", 1).execute().data[0]
+
+def valider_mariage(devis_id, lignes_rec, devis_info):
+    # 1. Mettre à jour le statut
+    supabase.table("devis").update({"statut": "validé"}).eq("id", devis_id).execute()
+    
+    # 2. Déduire les ingrédients du stock
+    if lignes_rec:
+        for lr in lignes_rec:
+            ings = get_ingredients_devis(lr['recette_id'])
+            for ing in ings:
+                produit = supabase.table("produits").select("quantite_stock").eq("id", ing['produits']['id']).execute().data[0]
+                qte_utilisee = ing['quantite_par_personne'] * lr['nb_personnes']
+                supabase.table("produits").update({"quantite_stock": produit['quantite_stock'] - qte_utilisee}).eq("id", ing['produits']['id']).execute()
+    else:
+        ings = get_ingredients_devis(devis_info['recette_id'])
+        for ing in ings:
+            produit = supabase.table("produits").select("quantite_stock").eq("id", ing['produits']['id']).execute().data[0]
+            qte_utilisee = ing['quantite_par_personne'] * devis_info['nb_personnes']
+            supabase.table("produits").update({"quantite_stock": produit['quantite_stock'] - qte_utilisee}).eq("id", ing['produits']['id']).execute()
 
 with st.container(border=True):
     col1, col2, col3 = st.columns(3)
@@ -113,43 +133,91 @@ else:
                     st.dataframe(pd.DataFrame([{"Poste": e['type_employe'], "Effectif": e['nombre'], "Heures": e['heures'], "Coût total": f"{e['cout_total']:.2f} €"} for e in employes]), use_container_width=True, hide_index=True)
 
             st.divider()
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("Générer le PDF", key=f"pdf_{d['id']}", icon=":material/print:", use_container_width=True):
-                    params, employes_d = get_parametres(), get_employes_devis(d['id'])
-                    detail_recettes, detail_ingredients = [], []
+            
+            # --- GESTION DES BOUTONS SELON LE STATUT ---
+            if d['statut'] == 'simulation':
+                col_val, col_pdf, col_sup = st.columns(3)
+                
+                with col_val:
+                    if st.button("Valider la prestation", key=f"val_{d['id']}", type="primary", icon=":material/check_circle:", use_container_width=True):
+                        valider_mariage(d['id'], lignes_rec, d)
+                        st.rerun()
 
-                    if lignes_rec:
-                        for lr in lignes_rec:
-                            nom_r = lr['recettes']['nom'] if lr.get('recettes') else "Archivée"
-                            ings = get_ingredients_devis(lr['recette_id'])
-                            cout_unit = 0
+                with col_pdf:
+                    if st.button("Générer le PDF", key=f"pdf_{d['id']}", icon=":material/print:", use_container_width=True):
+                        params, employes_d = get_parametres(), get_employes_devis(d['id'])
+                        detail_recettes, detail_ingredients = [], []
+
+                        if lignes_rec:
+                            for lr in lignes_rec:
+                                nom_r = lr['recettes']['nom'] if lr.get('recettes') else "Archivée"
+                                ings = get_ingredients_devis(lr['recette_id'])
+                                cout_unit = 0
+                                for ing in ings:
+                                    qte_totale = ing['quantite_par_personne'] * lr['nb_personnes']
+                                    cout = qte_totale * ing['produits']['prix_achat']
+                                    cout_unit += ing['quantite_par_personne'] * ing['produits']['prix_achat']
+                                    detail_ingredients.append({"Ingrédient": f"{ing['produits']['nom']} ({nom_r} - {lr['nb_personnes']}p)", "Qté / personne": f"{ing['quantite_par_personne']} {ing['produits']['unite']}", "Qté totale": f"{qte_totale:.2f} {ing['produits']['unite']}", "Prix achat": f"{ing['produits']['prix_achat']} €", "Coût total": f"{cout:.2f} €"})
+                                detail_recettes.append({"Recette": nom_r, "Nb personnes": f"{lr['nb_personnes']} pers.", "Coût / pers.": f"{cout_unit:.2f} €", "Coût total": f"{cout_unit * lr['nb_personnes']:.2f} €"})
+                        else:
+                            ings = get_ingredients_devis(d['recette_id'])
                             for ing in ings:
-                                qte_totale = ing['quantite_par_personne'] * lr['nb_personnes']
+                                qte_totale = ing['quantite_par_personne'] * d['nb_personnes']
                                 cout = qte_totale * ing['produits']['prix_achat']
-                                cout_unit += ing['quantite_par_personne'] * ing['produits']['prix_achat']
-                                detail_ingredients.append({"Ingrédient": f"{ing['produits']['nom']} ({nom_r} - {lr['nb_personnes']}p)", "Qté / personne": f"{ing['quantite_par_personne']} {ing['produits']['unite']}", "Qté totale": f"{qte_totale:.2f} {ing['produits']['unite']}", "Prix achat": f"{ing['produits']['prix_achat']} €", "Coût total": f"{cout:.2f} €"})
-                            detail_recettes.append({"Recette": nom_r, "Nb personnes": f"{lr['nb_personnes']} pers.", "Coût / pers.": f"{cout_unit:.2f} €", "Coût total": f"{cout_unit * lr['nb_personnes']:.2f} €"})
-                    else:
-                        ings = get_ingredients_devis(d['recette_id'])
-                        for ing in ings:
-                            qte_totale = ing['quantite_par_personne'] * d['nb_personnes']
-                            cout = qte_totale * ing['produits']['prix_achat']
-                            detail_ingredients.append({"Ingrédient": ing['produits']['nom'], "Qté / personne": f"{ing['quantite_par_personne']} {ing['produits']['unite']}", "Qté totale": f"{qte_totale:.2f} {ing['produits']['unite']}", "Prix achat": f"{ing['produits']['prix_achat']} €", "Coût total": f"{cout:.2f} €"})
-                        cout_unit = d['cout_ingredients'] / d['nb_personnes'] if d['nb_personnes'] else 0
-                        detail_recettes.append({"Recette": recette_nom, "Nb personnes": f"{d['nb_personnes']} pers.", "Coût / pers.": f"{cout_unit:.2f} €", "Coût total": f"{d['cout_ingredients']:.2f} €"})
+                                detail_ingredients.append({"Ingrédient": ing['produits']['nom'], "Qté / personne": f"{ing['quantite_par_personne']} {ing['produits']['unite']}", "Qté totale": f"{qte_totale:.2f} {ing['produits']['unite']}", "Prix achat": f"{ing['produits']['prix_achat']} €", "Coût total": f"{cout:.2f} €"})
+                            cout_unit = d['cout_ingredients'] / d['nb_personnes'] if d['nb_personnes'] else 0
+                            detail_recettes.append({"Recette": recette_nom, "Nb personnes": f"{d['nb_personnes']} pers.", "Coût / pers.": f"{cout_unit:.2f} €", "Coût total": f"{d['cout_ingredients']:.2f} €"})
 
-                    detail_employes = [{"Type": e['type_employe'], "Nb employés": e['nombre'], "Nb heures": e['heures'], "Taux horaire": f"{params['taux_horaire']} €/h", "Coût total": f"{e['cout_total']:.2f} €"} for e in employes_d]
-                    
-                    # Reconstruction logic financière pour le PDF
-                    marge_brute_pdf = d['prix_final'] - d['cout_ingredients']
-                    resultat = {"cout_ingredients": d['cout_ingredients'], "cout_employes": d['cout_employes'], "frais_fixes_total": d['frais_fixes'], "cout_total": d['cout_total'], "prix_final": d['prix_final'], "marge_brute": marge_brute_pdf, "benefice": d['benefice'], "detail_recettes": detail_recettes, "detail_ingredients": detail_ingredients, "detail_employes": detail_employes, "taux_horaire": params['taux_horaire']}
+                        detail_employes = [{"Type": e['type_employe'], "Nb employés": e['nombre'], "Nb heures": e['heures'], "Taux horaire": f"{params['taux_horaire']} €/h", "Coût total": f"{e['cout_total']:.2f} €"} for e in employes_d]
+                        marge_brute_pdf = d['prix_final'] - d['cout_ingredients']
+                        resultat = {"cout_ingredients": d['cout_ingredients'], "cout_employes": d['cout_employes'], "frais_fixes_total": d['frais_fixes'], "cout_total": d['cout_total'], "prix_final": d['prix_final'], "marge_brute": marge_brute_pdf, "benefice": d['benefice'], "detail_recettes": detail_recettes, "detail_ingredients": detail_ingredients, "detail_employes": detail_employes, "taux_horaire": params['taux_horaire']}
 
-                    nom_fichier = generer_pdf_devis(d['nom_client'], d['date_mariage'], recette_nom, d['nb_personnes'], detail_ingredients, detail_employes, resultat, dict(params), d['id'])
-                    with open(nom_fichier, "rb") as f:
-                        st.download_button("Télécharger le document PDF", data=f, file_name=os.path.basename(nom_fichier), mime="application/pdf", icon=":material/download:", key=f"dl_{d['id']}", use_container_width=True)
+                        nom_fichier = generer_pdf_devis(d['nom_client'], d['date_mariage'], recette_nom, d['nb_personnes'], detail_ingredients, detail_employes, resultat, dict(params), d['id'])
+                        with open(nom_fichier, "rb") as f:
+                            st.download_button("Télécharger le document PDF", data=f, file_name=os.path.basename(nom_fichier), mime="application/pdf", icon=":material/download:", key=f"dl_{d['id']}", use_container_width=True)
 
-            with col2:
-                if st.button("Supprimer ce devis", key=f"sup_{d['id']}", icon=":material/delete:", use_container_width=True):
-                    supprimer_devis(d['id'])
-                    st.rerun()
+                with col_sup:
+                    if st.button("Supprimer ce devis", key=f"sup_{d['id']}", icon=":material/delete:", use_container_width=True):
+                        supprimer_devis(d['id'])
+                        st.rerun()
+
+            else:
+                col_pdf, col_sup = st.columns(2)
+                
+                with col_pdf:
+                    if st.button("Générer le PDF", key=f"pdf_{d['id']}", icon=":material/print:", use_container_width=True):
+                        params, employes_d = get_parametres(), get_employes_devis(d['id'])
+                        detail_recettes, detail_ingredients = [], []
+
+                        if lignes_rec:
+                            for lr in lignes_rec:
+                                nom_r = lr['recettes']['nom'] if lr.get('recettes') else "Archivée"
+                                ings = get_ingredients_devis(lr['recette_id'])
+                                cout_unit = 0
+                                for ing in ings:
+                                    qte_totale = ing['quantite_par_personne'] * lr['nb_personnes']
+                                    cout = qte_totale * ing['produits']['prix_achat']
+                                    cout_unit += ing['quantite_par_personne'] * ing['produits']['prix_achat']
+                                    detail_ingredients.append({"Ingrédient": f"{ing['produits']['nom']} ({nom_r} - {lr['nb_personnes']}p)", "Qté / personne": f"{ing['quantite_par_personne']} {ing['produits']['unite']}", "Qté totale": f"{qte_totale:.2f} {ing['produits']['unite']}", "Prix achat": f"{ing['produits']['prix_achat']} €", "Coût total": f"{cout:.2f} €"})
+                                detail_recettes.append({"Recette": nom_r, "Nb personnes": f"{lr['nb_personnes']} pers.", "Coût / pers.": f"{cout_unit:.2f} €", "Coût total": f"{cout_unit * lr['nb_personnes']:.2f} €"})
+                        else:
+                            ings = get_ingredients_devis(d['recette_id'])
+                            for ing in ings:
+                                qte_totale = ing['quantite_par_personne'] * d['nb_personnes']
+                                cout = qte_totale * ing['produits']['prix_achat']
+                                detail_ingredients.append({"Ingrédient": ing['produits']['nom'], "Qté / personne": f"{ing['quantite_par_personne']} {ing['produits']['unite']}", "Qté totale": f"{qte_totale:.2f} {ing['produits']['unite']}", "Prix achat": f"{ing['produits']['prix_achat']} €", "Coût total": f"{cout:.2f} €"})
+                            cout_unit = d['cout_ingredients'] / d['nb_personnes'] if d['nb_personnes'] else 0
+                            detail_recettes.append({"Recette": recette_nom, "Nb personnes": f"{d['nb_personnes']} pers.", "Coût / pers.": f"{cout_unit:.2f} €", "Coût total": f"{d['cout_ingredients']:.2f} €"})
+
+                        detail_employes = [{"Type": e['type_employe'], "Nb employés": e['nombre'], "Nb heures": e['heures'], "Taux horaire": f"{params['taux_horaire']} €/h", "Coût total": f"{e['cout_total']:.2f} €"} for e in employes_d]
+                        marge_brute_pdf = d['prix_final'] - d['cout_ingredients']
+                        resultat = {"cout_ingredients": d['cout_ingredients'], "cout_employes": d['cout_employes'], "frais_fixes_total": d['frais_fixes'], "cout_total": d['cout_total'], "prix_final": d['prix_final'], "marge_brute": marge_brute_pdf, "benefice": d['benefice'], "detail_recettes": detail_recettes, "detail_ingredients": detail_ingredients, "detail_employes": detail_employes, "taux_horaire": params['taux_horaire']}
+
+                        nom_fichier = generer_pdf_devis(d['nom_client'], d['date_mariage'], recette_nom, d['nb_personnes'], detail_ingredients, detail_employes, resultat, dict(params), d['id'])
+                        with open(nom_fichier, "rb") as f:
+                            st.download_button("Télécharger le document PDF", data=f, file_name=os.path.basename(nom_fichier), mime="application/pdf", icon=":material/download:", key=f"dl_{d['id']}", use_container_width=True)
+
+                with col_sup:
+                    if st.button("Supprimer ce devis", key=f"sup_{d['id']}", icon=":material/delete:", use_container_width=True):
+                        supprimer_devis(d['id'])
+                        st.rerun()
